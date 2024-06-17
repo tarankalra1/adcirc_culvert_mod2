@@ -146,6 +146,7 @@ C     variables which describe the full domain
       INTEGER MNBFR  ! number of Periodic Elevation Bndry Forcing Constituents
       INTEGER MNFFR  ! number of Periodic Norm. Flow Bndry Forcing Constituents
       INTEGER MNSTAE ! number of Elevation Recording Stations
+      INTEGER MNSTAFL ! number of Flux Recording Stations
       INTEGER MNSTAV ! number of Velocity Recording Stations
       INTEGER MNSTAC ! number of Concentration Recording Stations
       INTEGER MNSTAM ! number of meteorological Recording Stations
@@ -189,6 +190,7 @@ C     Solver Type:
       LOGICAL :: fluxBoundary = .false. ! avoid collision with NFLUXF in pre_global module
 ! tcm v51.20.03 additions for station files outside the fort.15
       LOGICAL USE_ELEV_STAT_FILE    !.true. if an elevation station file exists
+      LOGICAL USE_FLUX_STAT_FILE    !.true. if an flux station file exists
       LOGICAL USE_VEL_STAT_FILE     !.true. if a velocity station file exists
       LOGICAL USE_CONC_STAT_FILE    !.true. if a concentration station file exists
       LOGICAL USE_MET_STAT_FILE     !.true. if a met station file exists
@@ -302,7 +304,7 @@ Cobell - Added for found time varying weir namelist
       LOGICAL :: found_tvw_nml
 C.... tcm v51.20.04 additions for station location file
       integer ::  ios_stations
-      integer :: MNSTAE2,MNSTAV2,MNSTAC2,MNSTAM2
+      integer :: MNSTAE2,MNSTAFL2,MNSTAV2,MNSTAC2,MNSTAM2
 
 #ifdef ADCNETCDF
       NETCDF_AVAIL = .true.
@@ -419,8 +421,8 @@ C     jgf46.21 Added support for IBTYPE=52.
          case(4,24)
             NFLUXI=1
             NIBP=NIBP+NBN
-         case(5,25)
-            meshHasWeirWithPipes = .false.
+         case(5,25,6,26)
+            meshHasWeirWithPipes = .true.
             NFLUXIPipe=1
             NIBPPipe=NIBPPipe+NBN
          case default  ! mainland and island
@@ -533,7 +535,7 @@ Casey 180318: Added NWS=13
       LOGICAL :: found_density_nml = .false.
 C.... tcm v51.20.04 additions for station location file
       integer ::  ios_stations
-      integer :: MNSTAE2,MNSTAV2,MNSTAC2,MNSTAM2
+      integer :: MNSTAE2,MNSTAFL2,MNSTAV2,MNSTAC2,MNSTAM2
 
 C.... tcm v52.30.01 additions for Smagorinski Eddy Viscosity Namelist
       integer :: ios_smag = 0
@@ -1125,6 +1127,41 @@ C
       endif
       IF(MNSTAE.EQ.0) MNSTAE=1
 C
+C..... FLUX STATIONS
+C
+      MNSTAFL=0
+      MNSTAFL2=0
+      READ(15,*)  IDUM                              !SKIP OVER NOUTFL,TOUTSFL...
+      call setFormatUsage(idum)
+
+      READ(15,*) MNSTAFL                             !PROCESS MNSTAFL
+      ! tcm v51.20.03 -- added negative mnstafl to signal use of
+      ! external station file flux_stat.151 
+      if (MNSTAFL < 0) then
+         write(*,*) "External File Used for flux Station Locations"
+         USE_FLUX_STAT_FILE = .TRUE.
+         MNSTAFL = abs(MNSTAFL)  !reset to a positive value
+         ! need to open the flux station file and read the number of points
+         open(unit=151,file='flux_stat.151',status='old',err=76900,iostat=ios_stations)
+         read(151,*) MNSTAFL2
+         if (abs(MNSTAFL2).ne. abs(MNSTAFL)) then
+            MNSTAFL = abs(MNSTAFL2)  !reset the value to what's in the file
+         endif
+76900     if (ios_stations .ne. 0) then
+            write(*,*) "Error reading flux Station File: flux_stat.151"
+            stop  ! there is a stop here
+         endif 
+         close(151)                 
+      ELSE
+         write(*,*) "Flux Station Locations contained in fort.15"
+         USE_FLUX_STAT_FILE = .FALSE.
+         DO IL=1,MNSTAFL
+            READ(15,*) RDUM                            !SKIP OVER STA COORDS
+         ENDDO
+      endif
+      
+      IF(MNSTAFL.EQ.0) MNSTAFL=1
+C
 C..... VELOCITY STATIONS
 C
       MNSTAV=0
@@ -1381,7 +1418,7 @@ C
 
 C...
       WRITE(*,3000) MNPROC,MNE,MNP,MNEI,MNOPE,MNETA,
-     &  MNBOU,MNVEL,MNTIF,MNBFR,MNSTAE,MNSTAV,MNSTAC,MNSTAM,MNWP,
+     &  MNBOU,MNVEL,MNTIF,MNBFR,MNSTAE,MNSTAV,MNSTAFL,MNSTAC,MNSTAM,MNWP,
      &  MNWLAT,MNWLON,MNFFR
 C
       IF(NWS.EQ.0) WRITE(*,3011)
@@ -1416,10 +1453,11 @@ C     sb46.28sb01 added NWS=12: OWI format
       IF(ITITER.EQ.0) WRITE(*,3104)
       IF(ITITER.GT.0) WRITE(*,3105)
       IF(ITITER.LT.0) WRITE(*,3106)
-      IF(USE_ELEV_STAT_FILE) WRITE(*,3180)  !tcm v51.20.03
-      IF(USE_VEL_STAT_FILE) WRITE(*,3181)   !tcm v51.20.03
-      IF(USE_MET_STAT_FILE) WRITE(*,3182)   !tcm v51.20.03
-      IF(USE_CONC_STAT_FILE) WRITE(*,3183)  !tcm v51.20.03
+      IF(USE_ELEV_STAT_FILE) WRITE(*,3180)  !tcm v51.20.03 
+      IF(USE_FLUX_STAT_FILE) WRITE(*,3181)  !tcm v51.20.03 
+      IF(USE_VEL_STAT_FILE) WRITE(*,3182)   !tcm v51.20.03 
+      IF(USE_MET_STAT_FILE) WRITE(*,3183)   !tcm v51.20.03 
+      IF(USE_CONC_STAT_FILE) WRITE(*,3184)  !tcm v51.20.03 
       WRITE(*,3108)
 C
  3000 FORMAT(' *****************************************************',/,
@@ -1434,7 +1472,8 @@ C
      &       ' *       MNOPE = ',I6,3X,'   MNETA = ',I6,3X,'       *',/,
      &       ' *       MNBOU = ',I6,3X,'   MNVEL = ',I6,3X,'       *',/,
      &       ' *       MNTIF = ',I6,3X,'   MNBFR = ',I6,3X,'       *',/,
-     &       ' *       MNSTAE = ',I5,4X,'  MNSTAV = ',I5,4X,'      *',/,
+     &       ' *       MNSTAE = ',I5,4X,'  MNSTAFL = ',I5,4X,'     *',/,
+     &       ' *       MNSTAV = ',I5,5X,'                          *',/,
      &       ' *       MNSTAC = ',I5,4X,'  MNSTAM = ',I5,4X,'      *',/,
      &       ' *       MNWP = ',I7,'                               *',/,
      &       ' *       MNWLAT = ',I5,4X,'  MNWLON = ',I5,4X,'      *',/,
@@ -1472,9 +1511,10 @@ C
  3105 FORMAT(' *   and an iterative solver will be used            *')
  3106 FORMAT(' *   and no external solver will be used             *')
  3180 FORMAT(' *   An external elevation station file is used      *')  !tcm v51.20.03
- 3181 FORMAT(' *   An external velocity station file is used       *')  !tcm v51.20.03
- 3182 FORMAT(' *   An external met. station file is used           *')  !tcm v51.20.03
- 3183 FORMAT(' *   An external concentration station file is used  *') !tcm v51.20.03
+ 3181 FORMAT(' *   An external flux station file is used           *')  !tcm v51.20.03
+ 3182 FORMAT(' *   An external velocity station file is used       *')  !tcm v51.20.03
+ 3183 FORMAT(' *   An external met. station file is used           *')  !tcm v51.20.03
+ 3184 FORMAT(' *   An external concentration station file is used  *') !tcm v51.20.03
  3108 FORMAT(' *****************************************************',/)
 C
   60  FORMAT(A60)

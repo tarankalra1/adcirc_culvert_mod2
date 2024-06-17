@@ -664,7 +664,7 @@ C  This section for prep15
         ISWEIR(:) = .FALSE.
         DO K=1,NBOU
             SELECT CASE(IBTYPE(K))
-                CASE(4,24,5,25)
+                CASE(4,24,5,25,6,26)
                     DO J=1,NVELL(K)
                         ISWEIR(NBVV(K,J))=.TRUE.
                         ISWEIR(IBCONNR(K,J))=.TRUE.
@@ -1282,7 +1282,7 @@ C
             select case(IBTYPE(K))
             !
             ! weir boundaries
-            case(4,24,5,25)
+            case(4,24,5,25,6,26)
                DO I = 1,NVELL(K)
                   INDX = NBVV(K,I)
                   INDEX2 = IBCONNR(K,I)
@@ -1495,6 +1495,8 @@ C     jgf46.21 Added support for IBTYPE=52.
                IBP = IBP + NVELLP(K)
             case(5,25)
                IBPPipe = IBPPipe + NVELLP(K)
+            case(6,26)
+               IBP = IBP + NVELLP(K)
             case(94)
 !           DW/WP periodic boundary
                IPER = IPER + NVELLP(K)
@@ -1666,13 +1668,15 @@ C
      &                        LABELS(IMAP_NOD_LG(IBCONNRP(K,I),IPROC)),
      &                        BAR1(K,INDX),BAR2(K,INDX),BAR3(K,INDX)
                   ENDDO
-               case(5,25)
+               case(5,25,6,26)
                   DO I = 1,NVELLP(K)
                      INDX = LBINDEX_LG(K,I)
                      WRITE(14,83) LABELS(IMAP_NOD_LG(NBVVP(K,I),IPROC)),
      &                      LABELS(IMAP_NOD_LG(IBCONNRP(K,I),IPROC)),
      &                      BAR1(K,INDX),BAR2(K,INDX),BAR3(K,INDX),
-     &                      BAR4(K,INDX),BAR5(K,INDX),BAR6(K,INDX)
+     &                      BAR4(K,INDX),BAR5(K,INDX),BAR6(K,INDX),
+     &                      BAR7(K,INDX),BAR8(K,INDX),BAR9(K,INDX),
+     &                      BAR10(K,INDX),BAR11(K,INDX)
                   ENDDO
                case(94)
 C..... DW add support for ITYPE = 94
@@ -1741,7 +1745,7 @@ C
 C--Write a Local Input file ( fort.15 ) for each PE
 C
       ! max number of stations in any subdomain
-      NSTAE_MAX = 0; NSTAV_MAX = 0; NSTAM_MAX = 0; NSTAC_MAX = 0
+      NSTAE_MAX = 0; NSTAFL_MAX = 0; NSTAV_MAX = 0; NSTAM_MAX = 0; NSTAC_MAX = 0
 C
 
       ALLOCATE(NTIMEVARYINGWEIRP(NPROC))
@@ -1984,6 +1988,58 @@ C...     write the stations located in this proc's domain
             endif
          ENDDO
          if (use_elev_stat_file ) close(151)
+C
+C--Write Local Elevation Station Info:
+C--Create Local-to-Global element "ownership" of an elevation station
+C
+C     WRITE(15,80) STAFLMSG !jgf45.07 we may have changed NOUTFL in adcprep
+         WRITE(15,*) NOUTFL,TOUTSFL,TOUTFFL,NSPOOLFL
+C
+         NSTAFLP(IPROC) = 0
+         DO K = 1,abs(NSTAFL)                          !tcm -- added the comments below
+            DO J=1,NELP(IPROC)                        !nelp(iproc) lists the number of elements from processor iproc
+               INDX = abs(IMAP_EL_LG(J,IPROC))        ! global element number
+               IF (INDX.EQ.NNSFLG(K)) THEN             !nnseg(k) contains the element number station k resides in
+                  NSTAFLP(IPROC) = NSTAFLP(IPROC) + 1
+                  KK = K
+                  if (STAFL_SHARE(K) > -1) KK = -K
+                  IMAP_STAFL_LG(NSTAFLP(IPROC),IPROC) = KK
+                  STAFL_SHARE(K) = IPROC  
+                  ! tcm v51.20.03 once found exit the element loop
+                  exit
+               ENDIF
+            ENDDO
+         ENDDO
+         NSTAFL_MAX = MAX(NSTAFLP(IPROC),NSTAFL_MAX)
+C
+C...     update the number of stations for this proc's domain
+
+         if (use_flux_stat_file ) then  !tcm v51.20.03
+            CALL INSERT(NSTAFLMSG,OUTMSG,(/-NSTAFLP(IPROC)/),1)  !keep the negative sign for fort.15
+            write(15,80) OUTMSG
+            CALL INSERT(NSTAFLMSG,OUTMSG,NSTAFLP(IPROC),1)
+            LOCSTATFN(1:20) = 'PE0000/flux_stat.151'
+            CALL IWRITE(LOCstatFN,3,6,IPROC-1)
+            ios_stations = 0
+            open(unit=151,file=locstatfn,
+     &                    status='unknown',iostat=ios_stations)
+            write(151,80) OUTMSG 
+         else
+            CALL INSERT(NSTAFLMSG,OUTMSG,NSTAFLP(IPROC),1)
+            write(15,80) OUTMSG
+         endif         
+C
+C...     write the stations located in this proc's domain
+         DO K=1,NSTAFLP(IPROC)
+            INDX = abs(IMAP_STAFL_LG(K,IPROC))
+            if (use_flux_stat_file) then
+               write(151,80) STAFLLOC(INDX)
+            else
+               WRITE(15,80) STAFLLOC(INDX)
+            endif
+         ENDDO
+         if (use_flux_stat_file ) close(151)
+C
 C
 C--Write Local Velocity Station Info:
 C--Create Local-to-Global element "ownership" of an velocity station
@@ -2350,13 +2406,13 @@ C--Print Summary of Stations
 C
       print *, " "
       print *, "Station Data"
-      print *, "DOMAIN      NSTAE   NSTAV    NSTAC    NSTAM"
-      WRITE(*,92)  "GLOBAL",abs(NSTAE),abs(NSTAV),
+      print *, "DOMAIN      NSTAE  NSTAFL  NSTAV    NSTAC    NSTAM"
+      WRITE(*,92)  "GLOBAL",abs(NSTAE),abs(NSTAFL),abs(NSTAV),
      &                      abs(NSTAC),abs(NSTAM)
       DO IPROC=1, NPROC
          PE(1:6) = 'PE0000'
          CALL IWRITE(PE,3,6,IPROC-1)
-         WRITE(*,92)  PE,NSTAEP(IPROC),NSTAVP(IPROC),
+         WRITE(*,92)  PE,NSTAEP(IPROC),NSTAFLP(IPROC),NSTAVP(IPROC),
      .        NSTACP(IPROC),NSTAMP(IPROC)
       ENDDO
 C
@@ -2628,6 +2684,16 @@ C  if a ghost node
             WRITE(18,'(I12)') INDX           ! Global station number
          ENDDO
 
+C--Write the Global indexes of all flux Stations in local node order
+C  write global index as positive if a resident node and negative
+C  if a ghost node
+
+         WRITE(18,30040)abs(NSTAFL), NSTAFL_MAX, NSTAFLP(I) ! number of Global Elevation Stations
+         DO J = 1,NSTAFLP(I)
+            INDX = IMAP_STAFL_LG(J,I)
+            WRITE(18,'(I12)') INDX           ! Global station number
+         ENDDO
+
 C--Write the Global indexes of all Velocity Stations in local node order
 C  write global index as positive if a resident node and negative
 C  if a ghost node
@@ -2794,6 +2860,7 @@ Casey 100209: Changed I8 to I12 through this section.
 3002  FORMAT('NFLUXF  ',I12)
 3003  FORMAT('NETA    ',3I12)
 3004  FORMAT('NSTAE   ',3I12)
+30040 FORMAT('NSTAFL   ',3I12)
 3005  FORMAT('NSTAV   ',3I12)
 3006  FORMAT('NSTAM   ',3I12)
 3007  FORMAT('NSTAC   ',3I12)
@@ -7256,6 +7323,7 @@ C
       WRITE(80,'(I8,24x,A)') IM,'! IM, run type'         !jgf46.02
       WRITE(80,'(I8,24x,A)') NWS,'! NWS, wind data type' !jgf46.02
       WRITE(80,'(I8,24x,A)') abs(NSTAE),'! NSTAE'
+      WRITE(80,'(I8,24x,A)') abs(NSTAFL),'! NSTAFL'
       WRITE(80,'(I8,24x,A)') abs(NSTAV),'! NSTAV'
       IF (IM.EQ.10) THEN
          WRITE(80,'(I8,24x,A)') abs(NSTAC),' ! NSTAC' !jgf46.02
@@ -7293,6 +7361,16 @@ C
          WRITE(80,*) I,NSTAEP(I)
          DO K = 1,NSTAEP(I)
             WRITE(80,*) IMAP_STAE_LG(K,I)
+         ENDDO
+      ENDDO
+C
+      WRITE(80,'(I8,2E15.8,I8,A32)') NOUTFL,TOUTSFL,TOUTFFL,NSPOOLFL,
+     &    '   ! NOUTFL,TOUTSFL,TOUTFFL,NSPOOLFL'
+C
+      DO I = 1,NPROC
+         WRITE(80,*) I,NSTAFLP(I)
+         DO K = 1,NSTAFLP(I)
+            WRITE(80,*) IMAP_STAFL_LG(K,I)
          ENDDO
       ENDDO
 C
@@ -7581,7 +7659,7 @@ C---------------------------------------------------------------------------
       USE PRESIZES, ONLY: NM, MNTIF, MNE, MNP
       USE HARM, ONLY : IHARIND, CHARMV, NHASE, NHASV, NHAGE, NHAGV
       USE VERSION
-      USE PRE_GLOBAL, ONLY: NSTAE, NOUTE, RUNDES, RUNID, AGRID,
+      USE PRE_GLOBAL, ONLY: NSTAE, NOUTE, NOUTFL,RUNDES, RUNID, AGRID,
      &    DTDP, TAU0, STATIM, REFTIM, RNDAY, DRAMP, A00, B00, C00,
      &    H0, SL0, SF0, CF, ESLM, CORI, DP, NBDV, NBVV,
      &    SLEL, SFEL, ICS, NT, NTRSPE, IHOT, NOLIBF, NOLIFA, IM,
@@ -7589,6 +7667,8 @@ C---------------------------------------------------------------------------
      &    NOLICA, NOLICAT, NWP, NCOR, NTIP, NWS, NRS, NRAMP, NBFR,
      &    NHARFR, NHY, NOPE, NETA, NBOU, NVEL, G, SL1, SF1,
      &    NVDLL, NVELL, IBTYPE, IBTYPEE,
+     &    SLFLL, SFFLL, XFLL, YFLL,
+     &    NSTAFL, NOUTFL, 
      &    NSTAV, NOUTV, SLEV, SFEV, NTRSPV,
      &    NSTAM, NOUTM, SLEM, SFEM, NTRSPM,
      &    NOUTGE, SLAM, SFEA, NDSETSE,
@@ -7635,6 +7715,7 @@ C     unfortunate cut-and-paste duplication unnecessary.
       type(OutputDataDescript_t), SAVE :: HaElevDescript     ! fort.53
       type(OutputDataDescript_t), SAVE :: HaVelDescript      ! fort.54
       type(OutputDataDescript_t), SAVE :: ElevStaDescript    ! fort.61
+      type(OutputDataDescript_t), SAVE :: FluxStaDescript    ! fort.611
       type(OutputDataDescript_t), SAVE :: VelStaDescript     ! fort.62
       type(OutputDataDescript_t), SAVE :: ElevDescript       ! fort.63
       type(OutputDataDescript_t), SAVE :: Tau0Descript       ! fort.90
@@ -7830,6 +7911,28 @@ C     fort.61
       ElevStaDescript % file_basename        = 'fort'
       ElevStaDescript % readMaxMin           = .false.
       call makeFileName(ElevStaDescript)
+C
+C     fort.611
+      FluxStaDescript % specifier            = NOUTFL
+      FluxStaDescript % lun                  = 611
+      FluxStaDescript % initial_value        = 0.0
+      FluxStaDescript % num_items_per_record = 1
+      FluxStaDescript % num_fd_records       = abs(NSTAFL)
+      FluxStaDescript % num_records_this     = abs(NSTAFL)
+      FluxStaDescript % ConsiderWetDry       = .TRUE.
+      FluxStaDescript % alternate_value      = -99999.0
+      FluxStaDescript % field_name           = 'FluxSta'
+      IF (ICS.eq.2) THEN
+         FluxStaDescript % x_coord           => SLFLL
+         FluxStaDescript % y_coord           => SFFLL
+      ELSE
+         FluxStaDescript % x_coord           => XFLL
+         FluxStaDescript % y_coord           => YFLL
+      ENDIF
+      FluxStaDescript % file_extension       = 611
+      FluxStaDescript % file_basename        = 'fort'
+      FluxStaDescript % readMaxMin           = .false.
+      call makeFileName(FluxStaDescript)
 C
 C     fort.62
       VelStaDescript % specifier            = NOUTV
@@ -8809,6 +8912,7 @@ C     was specified.
       CALL initNetCDFOutputFile(HaElevDescript, reterr)
       CALL initNetCDFOutputFile(HaVelDescript, reterr)
       CALL initNetCDFOutputFile(ElevStaDescript, reterr)
+      CALL initNetCDFOutputFile(FluxStaDescript, reterr)
       CALL initNetCDFOutputFile(VelStaDescript, reterr)
       CALL initNetCDFOutputFile(ElevDescript, reterr)
       if (outputTau0.eqv..true.) then

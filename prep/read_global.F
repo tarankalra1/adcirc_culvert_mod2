@@ -30,7 +30,8 @@ C---------------------------------------------------------------------
       subroutine prepRead14()
       use pre_global, only : x, y, dp, nneg, ibtypee, nvdllmsg, nvdll,
      &   nbdv, nvellmsg, nvell, lbcode, ibtype, nbvv, ibconnr,
-     &   bar1, bar2, bar3, bar4, bar5, bar6, weir, weird, flux14_ary, 
+     &   bar1, bar2, bar3, bar4, bar5, bar6, 
+     &   bar7, bar8, bar9, bar10, bar11, weir, weird, flux14_ary, 
      &   bcts14_ary, agrid, aperiodic_bc_ts, bndbcriver, exist_bc_ts, 
      &   exist_flux, iden, mnbou, mnvel, nbou, nboumsg, nelg, neta, 
      &   netamsg, nfover, nnodg, nope, nopemsg, nvel, nvelmsg, nweir, 
@@ -231,6 +232,21 @@ C
                WEIR(NWEIR) = NBVV(K,I)
                WEIRD(NWEIR) = IBCONNR(K,I)
             ENDDO
+         case(6,26)
+            write(6,*) "I am on line 236"
+            DO I =1,NVELL(K)
+               READ(14,*) n1,n2,
+     &                   BAR1(K,I),BAR2(K,I),BAR3(K,I),
+     &                   BAR4(K,I),BAR5(K,I),BAR6(K,I),
+     &                   BAR7(K,I),BAR8(K,I),BAR9(K,I),
+     &                   BAR10(K,I),BAR11(K,I)
+               NBVV(K,I) = find(node_dict,n1)
+               IBCONNR(K,I) = find(node_dict,n2)
+               !--Construct List of WEIR nodes and their duals
+               NWEIR = NWEIR+1
+               WEIR(NWEIR) = NBVV(K,I)
+               WEIRD(NWEIR) = IBCONNR(K,I)
+            ENDDO
          case(2,12,22,32,52)
            NFLUXF=1 !jgf51.52.23
            DO I=1,NVELL(K)
@@ -378,7 +394,9 @@ C----------------------------------------------------------------------
      &   skipNeta
       use pre_global, only : x, y, dp, nneg, ibtypee, nvdllmsg, nvdll,
      &   nbdv, nvellmsg, nvell, lbcode, ibtype, nbvv, ibconnr,
-     &   bar1, bar2, bar3, weir, weird, flux14_ary, bcts14_ary, agrid,
+     &   bar1, bar2, bar3, bar4, bar5, bar6, bar7, 
+     &   bar8, bar9, bar10, bar11,
+     &   weir, weird, flux14_ary, bcts14_ary, agrid,
      &   aperiodic_bc_ts, bndbcriver, exist_bc_ts, exist_flux, iden,
      &   mnbou, mnvel, nbou, nboumsg, nelg, neta, netamsg, nfover,
      &   nnodg, nope, nopemsg, nvel, nvelmsg, nweir, river_above_msl,
@@ -419,7 +437,9 @@ C----------------------------------------------------------------------
       ! get mesh parameters
       call getMeshForPrep(agrid, x, y, dp)
       call getBoundariesForPrep(nvdll, nvell, ibtypee, nbdv, lbcode, ibtype, nbvv,
-     &   ibconnr, bar1, bar2, bar3, weir, weird, iden, nfover,
+     &   ibconnr, bar1, bar2, bar3, bar4, bar5, bar6,
+     &   bar7, bar8, bar9, bar10, bar11,
+     &   weir, weird, iden, nfover,
      &   exist_flux, flux14_ary)
       do k=1,nope
          write(nvdllmsg(k),'(i0)') nvdll(k)
@@ -456,7 +476,7 @@ C---------------------------------------------------------------------
       USE SIZES, ONLY : MNHARF
       USE MESH, ONLY : CYLINDERMAP
       USE GLOBAL, ONLY : parse, a2f, hss, screenUnit, STATNAME,
-     &                   STATNAMEV, STATNAMEM, STATNAMEC, ERROR, DEBUG,
+     &                  STATNAMEFL, STATNAMEV, STATNAMEM, STATNAMEC, ERROR, DEBUG,
      &                   allMessage, setMessageSource, deg2rad,
      &                   unsetMessageSource, INFO, logMessage,
      &                   scratchMessage, screenMessage
@@ -505,7 +525,7 @@ Casey 180318: Added NWS=13
       INTEGER :: IOS_OWINC
 #endif
 C...tcm v51.20.03 Local variables for external station location files
-      INTEGER :: NSTAE2,NSTAV2,NSTAC2,NSTAM2
+      INTEGER :: NSTAE2,NSTAFL2, NSTAV2,NSTAC2,NSTAM2
       INTEGER :: IOS_STATIONS
       INTEGER :: ios_wetDry
       namelist /wetDryControl/ outputNodeCode, outputNOFF,
@@ -1299,8 +1319,9 @@ C........CHECK FOR WEIR FLUX BOUNDARIES
                 NFLUXB = 1
             CASE(4,24)
                 NFLUXIB = 1
-            CASE(5,25)
+            CASE(5,25,6,26)
                 NFLUXIBP = 1
+                write(6,*) "line 1323"
         END SELECT
       ENDDO
       IF((NFLUXIB.EQ.1) .OR. (NFLUXIBP.EQ.1) .OR. (NFLUXB.EQ.1) )THEN
@@ -1416,6 +1437,116 @@ c...tcm v49.48.01 replace with new call to kdtsearch
       call setup_kdt_search()
       call kdtsearch(XEL,YEL,NNSEG,abs(NSTAE),
      &     'Elevation recording station   ')
+C
+C--Read Flux Recording Stations
+C...
+      READ(15,80) STAFLMSG
+      READ(STAFLMSG,*) NOUTFL,TOUTSFL,TOUTFFL,NSPOOLFL
+      write(6, *) " I am reading"
+      write(6,*) "NOUTFL", NOUTFL
+      IF (ABS(NOUTFL).GT.5) THEN
+        print *, "The value of NOUTFL is not allowed"
+        stop
+      ENDIF
+C
+      READ(15,80) NSTAFLMSG
+      READ(NSTAFLMSG,*) NSTAFL
+      write(6,*) 'nstafl=',nstafl ! jgfdebug
+      !tcm v51.20.03 -- addition for external flux station file
+      if (NSTAFL < 0 ) then
+         WRITE(*,*) "External File Used for Flux Station Locations"
+         USE_FLUX_STAT_FILE = .TRUE.
+         IOS_STATIONS = 0
+         NSTAFL = abs(NSTAFL)  !reset to positive
+         NSTAFL2 = 0
+         OPEN(unit=151,file='flux_stat.151',status='old',err=76900,iostat=ios_stations)
+         READ(151,*) NSTAFL2
+         IF (ABS(NSTAFL2).NE. ABS(NSTAFL)) THEN
+            NSTAFL = ABS(NSTAFL2)  !RESET THE VALUE TO WHAT'S IN THE FILE
+         ENDIF
+76900     IF (IOS_STATIONS .NE. 0) THEN
+            WRITE(*,*) "Error reading flux Station File: flux_stat.151"
+            stop  ! there is a stop here
+         ENDIF                  
+      ELSE 
+         WRITE(*,*) "Flux Station Locations contained fort.15"
+      ENDIF
+      IF (ABS(NSTAFL).GT.MNSTAFL) THEN
+         print *, "NSTAFL = ",abs(NSTAFL), " exceeds parameter MNSTAFL = ",
+     &              MNSTAFL
+          stop
+      ENDIF
+#ifdef ADCNETCDF
+C
+C     ==================================================================
+C     START ADDITION BY MCF FOR NETCDF OPTION
+C
+!      IF(.NOT. ALLOCATED(STATNUMB))ALLOCATE(STATNUMB(abs(NSTAE),SNUMLEN))
+      IF(.NOT. ALLOCATED(STATNAMEFL))ALLOCATE(STATNAMEFL(abs(NSTAFL)))
+C
+C     END ADDITION BY MCF FOR NETCDF OPTION
+C     ==================================================================
+#endif
+      DO I=1,ABS(NSTAFL)
+         IF (USE_FLUX_STAT_FILE ) then  !read from external file
+            READ(151,'(A132)') STAFLLOC(I)
+         ELSE
+            READ(15,'(A132)') STAFLLOC(I)
+         ENDIF
+            IF(ICS.EQ.1) THEN
+
+C     ==================================================================
+C     START ADDITION BY MCF FOR NETCDF OPTION
+C
+               IF((abs(NOUTFL).NE.3).AND.(abs(NOUTFL).NE.5))THEN
+                  READ(STAFLLOC(I),*) XFLL(I),YFLL(I)
+               ELSE
+#ifdef ADCNETCDF
+!                READ(15,'(A132)') STATLINE
+!                call parse(STATLINE, LVAR)
+                 call parse(STAFLLOC(I), LVAR)
+                 XFLL(I)=a2f(LVAR(1))
+                 YFLL(I)=a2f(LVAR(2))
+                 STATNAMEFL(I)=LVAR(3)
+C                WRITE(6,99110) XFLL(I), YFLL(I), STATNAMEFL(I)
+#endif
+               ENDIF
+
+            ELSE
+               IF((abs(NOUTFL).NE.3).AND.(abs(NOUTFL).NE.5))THEN
+
+                  READ(STAFLLOC(I),*) SLFLL(I),SFFLL(I)
+               ELSE
+#ifdef ADCNETCDF
+!                 READ(15,'(A132)') STATLINE
+!                 call parse(STATLINE, LVAR)
+                  call parse(STAFLLOC(I), LVAR)
+                  SLFLL(I)=a2f(LVAR(1))
+                  SFFLL(I)=a2f(LVAR(2))
+                  STATNAMEFL(I)=LVAR(3)
+!                 WRITE(6,*)"parsed stations"
+!                 WRITE(6,9911) SLFLL(I),SFFLL(I), STATNAMEFL(I,SNAMLFLN)
+#endif
+               ENDIF
+
+
+            SLFLL(I)=DEG2RAD*SLFLL(I)
+            SFFLL(I)=DEG2RAD*SFFLL(I)
+            CALL CYLINDERMAP(XFLL(I),YFLL(I),SLFLL(i),SFFLL(i),SL0,SF0,ICS)
+         ENDIF
+         ENDDO !loop over elevation stations
+         if (USE_FLUX_STAT_FILE) CLOSE(151) !close external file if one was used
+99110    FORMAT(F12.3,2X,F12.3, 6X, A50)
+
+C
+C--For Each flux Station:
+C  Find the Global Index of the element it lies in.
+c...tcm v49.48.01 replace with new call to kdtsearch
+!      CALL CoordToEle(XFLL,YFLL,NNSFLG,NSTAFL,
+!     &     'Flux recording station   ')
+      call setup_kdt_search()
+      call kdtsearch(XFLL,YFLL,NNSFLG,abs(NSTAFL),
+     &     'Flux recording station   ')
 C
 C--Read Velocity Recording Stations
 C
