@@ -368,6 +368,20 @@ C Read Global indexes of Elevation Station nodes ( used by module global_io )
         ENDDO
       ENDIF
 
+C Read Global indexes of Flux Station nodes ( used by module global_io )
+      READ(18,3015) NSTAFL_G,jdumy_max,jdumy_loc    !tcm v51.20.05
+      IF (NSTAFL .ne. jdumy_loc ) then
+         call allMessage(ERROR,"Flux Station Dimensioning Error in fort.18")
+         CALL MSG_FINI()
+         CALL EXIT(1)
+      ENDIF
+      IF (NSTAFL > 0) THEN
+        ALLOCATE ( IMAP_STAFL_LG(NSTAFL) )
+        DO I=1,NSTAFL
+           READ(18,'(I12)') IMAP_STAFL_LG(I)
+        ENDDO
+      ENDIF
+
 C Read Global indexes of Velocity  Station nodes ( used by module global_io )
       READ(18,3015) NSTAV_G,jdumy_max,jdumy_loc    !tcm v51.20.05
       IF (NSTAV .ne. jdumy_loc ) then

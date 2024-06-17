@@ -21,9 +21,9 @@ C----------------------------------------------------------------------
       !    2 D   D A T A
       !
 #ifdef CSWAN
-      integer, parameter :: numOutputDescript2D = 48
+      integer, parameter :: numOutputDescript2D = 49
 #else
-      integer, parameter :: numOutputDescript2D = 34
+      integer, parameter :: numOutputDescript2D = 35
 #endif
 
       type descript2D_ptr_t
@@ -32,6 +32,7 @@ C----------------------------------------------------------------------
       type(descript2D_ptr_t), allocatable :: ptr(:)
       !
       type(OutputDataDescript_t), target :: ElevStaDescript
+      type(OutputDataDescript_t), target :: FluxStaDescript
       type(OutputDataDescript_t), target :: VelStaDescript
       type(OutputDataDescript_t), target :: ElevDescript
       type(OutputDataDescript_t), target :: Tau0Descript
@@ -74,6 +75,7 @@ Cobell Added a descript for time varying weir tracking
 
 C     jgf48.03 Full domain arrays used when writing globalio output.
       real(sz), allocatable, target :: et00_g(:)
+      real(sz), allocatable, target :: qn2_flux_00_g(:)
       real(sz), allocatable, target :: uu00_g(:)
       real(sz), allocatable, target :: vv00_g(:)
       real(sz), allocatable, target :: tau0var_g(:)
@@ -319,6 +321,10 @@ C----------------------------------------------------------------------
      &                  numFormats, write_local_files, localdir,
      &                  controlFileName
       USE GLOBAL, ONLY : imap_stae_lg, imap_stav_lg, et00, eta2,
+     &   imap_stafl_lg, qn2_flux_00 , qn2_flux, 
+     &   nscoufl, iflstp, nnfl, noutfl, nstafl, nstafl_g, staifl1,
+     &   staifl2, staifl3, ntcysfl, ntcyffl, nspoolfl, xffl, yffl,
+     &   slfll, sffll,
      &   nscoue, iestp, nne, staie1, staie2, staie3, xel, yel,
      &   slel, sfel, uu00, vv00, uu2, vv2, nscouv, ivstp, nnv,
      &   staiv1, staiv2, staiv3, xev, yev, slev, sfev, nscouge,
@@ -391,56 +397,57 @@ C
       ! output
       allocate(ptr(numOutputDescript2D))
       ptr(1)%descript2D => ElevStaDescript
-      ptr(2)%descript2D => VelStaDescript
-      ptr(3)%descript2D => ElevDescript
-      ptr(4)%descript2D => Tau0Descript
-      ptr(5)%descript2D => VelDescript
-      ptr(6)%descript2D => PrStaDescript
-      ptr(7)%descript2D => WindVelStaDescript
-      ptr(8)%descript2D => PrDescript
-      ptr(9)%descript2D => WindVelDescript
-      ptr(10)%descript2D => ConcStaDescript
-      ptr(11)%descript2D => ConcDescript
-      ptr(12)%descript2D => IceDescript
-      ptr(13)%descript2D => IceStaDescript
-      ptr(14)%descript2D => EtaMaxDescript
-      ptr(15)%descript2D => UMaxDescript
-      ptr(16)%descript2D => WVMaxDescript
-      ptr(17)%descript2D => PrMinDescript
-      ptr(18)%descript2D => RSMaxDescript
-      ptr(19)%descript2D => SpongeDescript
-      ptr(20)%descript2D => ESLDescript
-      ptr(21)%descript2D => BathyDescript
-      ptr(22)%descript2D => BathyStaDescript
-      ptr(23)%descript2D => RSDescript
-      ptr(24)%descript2D => weirElevDescript
-      ptr(25)%descript2D => nodeCodeOutDescript
-      ptr(26)%descript2D => noffOutDescript
-      ptr(27)%descript2D => inundationTimeDescript
-      ptr(28)%descript2D => maxInunDepthDescript
-      ptr(29)%descript2D => endRisingInunDescript
-      ptr(30)%descript2D => initiallyDryDescript
-      ptr(31)%descript2D => everDriedDescript
-      ptr(32)%descript2D => windDragDescript
-      ptr(33)%descript2D => dynamicWaterLevelCorrectionDescript
-      ptr(34)%descript2D => dynamicWaterLevelCorrectionStaDescript
+      ptr(2)%descript2D => FluxStaDescript
+      ptr(3)%descript2D => VelStaDescript
+      ptr(4)%descript2D => ElevDescript
+      ptr(5)%descript2D => Tau0Descript
+      ptr(6)%descript2D => VelDescript
+      ptr(7)%descript2D => PrStaDescript
+      ptr(8)%descript2D => WindVelStaDescript
+      ptr(9)%descript2D => PrDescript
+      ptr(10)%descript2D => WindVelDescript
+      ptr(11)%descript2D => ConcStaDescript
+      ptr(12)%descript2D => ConcDescript
+      ptr(13)%descript2D => IceDescript
+      ptr(14)%descript2D => IceStaDescript
+      ptr(15)%descript2D => EtaMaxDescript
+      ptr(16)%descript2D => UMaxDescript
+      ptr(17)%descript2D => WVMaxDescript
+      ptr(18)%descript2D => PrMinDescript
+      ptr(19)%descript2D => RSMaxDescript
+      ptr(20)%descript2D => SpongeDescript
+      ptr(21)%descript2D => ESLDescript
+      ptr(22)%descript2D => BathyDescript
+      ptr(23)%descript2D => BathyStaDescript
+      ptr(24)%descript2D => RSDescript
+      ptr(25)%descript2D => weirElevDescript
+      ptr(26)%descript2D => nodeCodeOutDescript
+      ptr(27)%descript2D => noffOutDescript
+      ptr(28)%descript2D => inundationTimeDescript
+      ptr(29)%descript2D => maxInunDepthDescript
+      ptr(30)%descript2D => endRisingInunDescript
+      ptr(31)%descript2D => initiallyDryDescript
+      ptr(32)%descript2D => everDriedDescript
+      ptr(33)%descript2D => windDragDescript
+      ptr(34)%descript2D => dynamicWaterLevelCorrectionDescript
+      ptr(35)%descript2D => dynamicWaterLevelCorrectionStaDescript
 
 !... For SWAN, there are additional output arrays
 #ifdef CSWAN
-      ptr(35)%descript2D => SwanHSDescript 
-      ptr(36)%descript2D => SwanHSMaxDescript
-      ptr(37)%descript2D => SwanDIRDescript
-      ptr(38)%descript2D => SwanDIRMaxDescript
-      ptr(39)%descript2D => SwanTM01Descript
-      ptr(40)%descript2D => SwanTM01MaxDescript
-      ptr(41)%descript2D => SwanTPSDescript
-      ptr(42)%descript2D => SwanTPSMaxDescript
-      ptr(43)%descript2D => SwanWindDescript
-      ptr(44)%descript2D => SwanWindMaxDescript
-      ptr(45)%descript2D => SwanTM02Descript
-      ptr(46)%descript2D => SwanTM02MaxDescript
-      ptr(47)%descript2D => SwanTMM10Descript
-      ptr(48)%descript2D => SwanTMM10MaxDescript
+      ptr(36)%descript2D => SwanHSDescript 
+      ptr(37)%descript2D => SwanHSMaxDescript
+      ptr(38)%descript2D => SwanDIRDescript
+      ptr(39)%descript2D => SwanDIRMaxDescript
+      ptr(40)%descript2D => SwanTM01Descript
+      ptr(41)%descript2D => SwanTM01MaxDescript
+      ptr(42)%descript2D => SwanTPSDescript
+      ptr(43)%descript2D => SwanTPSMaxDescript
+      ptr(44)%descript2D => SwanWindDescript
+      ptr(45)%descript2D => SwanWindMaxDescript
+      ptr(46)%descript2D => SwanTM02Descript
+      ptr(47)%descript2D => SwanTM02MaxDescript
+      ptr(48)%descript2D => SwanTMM10Descript
+      ptr(49)%descript2D => SwanTMM10MaxDescript
 #endif
 
       ! jgf51.21.24: Set some defaults
@@ -469,7 +476,7 @@ C
          ptr(i) % descript2D % readMaxMin = .false.
          ptr(i) % descript2D % isInteger = .false.
       end do
-
+        
       ! fort.61
       IF ( (MNPROC.gt.1) .and. (MyProc.eq.0) ) THEN
          ALLOCATE(ET00_g(NSTAE_G))
@@ -500,6 +507,38 @@ C
       ELSE
          ElevStaDescript % x_coord              => SLEL ! radians
          ElevStaDescript % y_coord              => SFEL
+      ENDIF
+      !
+      ! fort.611
+      IF ( (MNPROC.gt.1) .and. (MyProc.eq.0) ) THEN
+         ALLOCATE(QN2_FLUX_00_G(NSTAFL_G))
+      ENDIF
+      FluxStaDescript % lun                  = 611
+      FluxStaDescript % specifier            = NOUTFL
+      FluxStaDescript % num_fd_records       = NSTAFL_G
+      FluxStaDescript % num_records_this     = NSTAFL
+      FluxStaDescript % imap                 => IMAP_STAFL_LG
+      FluxStaDescript % array                => QN2_FLUX_00
+      FluxStaDescript % array_g              => QN2_FLUX_00_g
+      FluxStaDescript % interped_array       => QN2_FLUX  
+      FluxStaDescript % ConsiderWetDry       = .TRUE.
+      FluxStaDescript % field_name           = 'FluxSta'
+      FluxStaDescript % isStation            = .true.
+      FluxStaDescript % startTimeStep           = NTCYSFL
+      FluxStaDescript % endTimeStep             = NTCYFFL 
+      FluxStaDescript % outputTimeStepIncrement = NSPOOLFL
+      FluxStaDescript % spoolCounter            => NSCOUFL
+      FluxStaDescript % filepos                 => IFLSTP
+      FluxStaDescript % elements                => NNFL
+      FluxStaDescript % interp_fac1             => STAIFL1
+      FluxStaDescript % interp_fac2             => STAIFL2
+      FluxStaDescript % interp_fac3             => STAIFL3
+      IF (ICS.eq.1) THEN
+         FluxStaDescript % x_coord              => XFFL ! use orig coord
+         FluxStaDescript % y_coord              => YFFL
+      ELSE
+         FluxStaDescript % x_coord              => SLFLL ! radians
+         FluxStaDescript % y_coord              => SFFLL
       ENDIF
       !
       ! fort.62

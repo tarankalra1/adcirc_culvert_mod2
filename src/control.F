@@ -116,6 +116,13 @@
       integer :: nstae
       real(sz), allocatable :: xel(:)
       real(sz), allocatable :: yel(:)
+      integer :: noutfl
+      real(sz) :: toutsfl
+      real(sz) :: toutffl
+      integer :: nspoolfl
+      integer :: nstafl
+      real(sz), allocatable :: xffl(:)
+      real(sz), allocatable :: yffl(:)
       integer :: noutv
       real(sz) :: toutsv
       real(sz) :: toutfv
@@ -186,7 +193,7 @@
       logical :: readMetaData
       integer, parameter :: metadataRequired(9)
      &     = (/3, 5, 7, 367, 368, 567, 568, 667, 668/)
-      integer :: outputSpecifiers(9)
+      integer :: outputSpecifiers(10)
       !
       integer :: lineNum  ! line number being read from fort.15
       integer :: echoLine ! line number being echoed to screen
@@ -485,6 +492,11 @@ c     arc add nws13 190110
       read(15,*,err=10,end=20,iostat=ios) nstae
       linenum = linenum + 1
       call readStations(nstae, xel, yel)
+      read(15,*,err=10,end=20,iostat=ios) noutfl,toutsfl,toutffl,nspoolfl
+      linenum = linenum + 1
+      read(15,*,err=10,end=20,iostat=ios) nstafl
+      linenum = linenum + 1
+      call readStations(nstafl, xffl, yffl)
       read(15,*,err=10,end=20,iostat=ios) noutv,toutsv,toutfv,nspoolv
       linenum = linenum + 1
       read(15,*,err=10,end=20,iostat=ios) nstav
@@ -542,17 +554,18 @@ c     arc add nws13 190110
       ! read metadata if netcdf or xdmf format was specified in the output
       ! identifiers
       outputSpecifiers(1) = noute
-      outputSpecifiers(2) = noutv
-      outputSpecifiers(3) = noutc
-      outputSpecifiers(4) = noutm
-      outputSpecifiers(5) = noutge
-      outputSpecifiers(6) = noutgv
-      outputSpecifiers(7) = noutgc
-      outputSpecifiers(8) = noutgw
-      outputSpecifiers(9) = nhstar
+      outputSpecifiers(2) = noutfl
+      outputSpecifiers(3) = noutv
+      outputSpecifiers(4) = noutc
+      outputSpecifiers(5) = noutm
+      outputSpecifiers(6) = noutge
+      outputSpecifiers(7) = noutgv
+      outputSpecifiers(8) = noutgc
+      outputSpecifiers(9) = noutgw
+      outputSpecifiers(10) = nhstar
       ! check to see if we need to read in metadata
       readMetaData = .false.
-      outputSpec: do i=1,9
+      outputSpec: do i=1,10
          metadataReq: do j=1,9
             if (outputSpecifiers(i).eq.metadataRequired(j)) then
                readMetaData = .true.
@@ -991,6 +1004,13 @@ c     arc add nws13 190110
       write(echoUnit,fmt='(i0,10x,"! nstae")') nstae
       echoLine = echoLine + 1 ; if (echoLine.gt.lineNum) return
       call echoStations(nstae, xel, yel, echoUnit)
+      write(echoUnit,
+     & fmt='(i0,1x,2f6.3,1x,i0,10x,"! noutfl,toutsfl,toutffl,nspoolfl")')
+     &  noutfl,toutsfl,toutffl,nspoolfl
+      echoLine = echoLine + 1 ; if (echoLine.gt.lineNum) return
+      write(echoUnit,fmt='(i0,10x,"! nstafl")') nstafl
+      echoLine = echoLine + 1 ; if (echoLine.gt.lineNum) return
+      call echoStations(nstafl, xffl, yffl, echoUnit)
       write(echoUnit,
      &  fmt='(i0,1x,2f15.7,1x,i0,10x,"! noutv,toutsv,toutfv,nspoolv")')
      &  noutv,toutsv,toutfv,nspoolv

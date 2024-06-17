@@ -1134,7 +1134,7 @@ C-----------------------------------------------------------------------
       INTEGER, intent(in) :: IT
 !
       double precision :: ttime, dpack(1)  !st3
-      integer          :: iit,   ipack(26)  !st3
+      integer          :: iit,   ipack(28)  !st3
       character(len=2048) ::     cjunk1  !st3
       character(len=20) ::       cjunk2  !st3  tcm v51.26 changed from 10 to 20
       integer :: iNHSINC  !tcm v51.26
@@ -1174,29 +1174,31 @@ C-----------------------------------------------------------------------
         ipack( 7) = FileFmtVersion
         ipack( 8) = IESTP
         ipack( 9) = NSCOUE
-        ipack(10) = IVSTP
-        ipack(11) = NSCOUV
-        ipack(12) = ICSTP
-        ipack(13) = NSCOUC
-        ipack(14) = IPSTP
-        ipack(15) = IWSTP
-        ipack(16) = NSCOUM
-        ipack(17) = IGEP
-        ipack(18) = NSCOUGE
-        ipack(19) = IGVP
-        ipack(20) = NSCOUGV
-        ipack(21) = IGCP
-        ipack(22) = NSCOUGC
-        ipack(23) = IGPP
-        ipack(24) = IGWP
-        ipack(25) = NSCOUGW
-        ipack(26) = NHSINC  !tcm v51.26
+        ipack(10) = IFLSTP
+        ipack(11) = NSCOUFL
+        ipack(12) = IVSTP
+        ipack(13) = NSCOUV
+        ipack(14) = ICSTP
+        ipack(15) = NSCOUC
+        ipack(16) = IPSTP
+        ipack(17) = IWSTP
+        ipack(18) = NSCOUM
+        ipack(19) = IGEP
+        ipack(20) = NSCOUGE
+        ipack(21) = IGVP
+        ipack(22) = NSCOUGV
+        ipack(23) = IGCP
+        ipack(24) = NSCOUGC
+        ipack(25) = IGPP
+        ipack(26) = IGWP
+        ipack(27) = NSCOUGW
+        ipack(28) = NHSINC  !tcm v51.26
 
         dpack(1) = TimeLoc
         cjunk1 = trim(adjustl(GLOBALDIR))
         cjunk2 = trim(adjustl(hss%filename))
 
-        CALL MPI_SEND(ipack,26,MPI_INTEGER,MNPROC,TAG,WCOMM,IERR)
+        CALL MPI_SEND(ipack,28,MPI_INTEGER,MNPROC,TAG,WCOMM,IERR)
         CALL MPI_SEND(dpack,1,MPI_DOUBLE_PRECISION,MNPROC,TAG,WCOMM,IERR)
         CALL MPI_SEND(WRITE_LOCAL_HOT_START_FILES,1,MPI_LOGICAL,
      &                MNPROC,TAG,WCOMM,IERR)
@@ -1205,7 +1207,7 @@ C-----------------------------------------------------------------------
       endif
 
       if( WRITER_ID /= 0 ) then
-        CALL MPI_RECV(ipack,26,MPI_INTEGER,0,TAG,WCOMM,STAT,IERR)
+        CALL MPI_RECV(ipack,28,MPI_INTEGER,0,TAG,WCOMM,STAT,IERR)
         CALL MPI_RECV(dpack,1,MPI_DOUBLE_PRECISION,0,TAG,WCOMM,STAT,IERR)
         CALL MPI_RECV(WRITE_LOCAL_HOT_START_FILES,1,MPI_LOGICAL,
      &                0, TAG,WCOMM,STAT,IERR)
@@ -1220,23 +1222,25 @@ C-----------------------------------------------------------------------
         FileFmtVersion = ipack( 7)
         IESTP          = ipack( 8)
         NSCOUE         = ipack( 9)
-        IVSTP          = ipack(10)
-        NSCOUV         = ipack(11)
-        ICSTP          = ipack(12)
-        NSCOUC         = ipack(13)
-        IPSTP          = ipack(14)
-        IWSTP          = ipack(15)
-        NSCOUM         = ipack(16)
-        IGEP           = ipack(17)
-        NSCOUGE        = ipack(18)
-        IGVP           = ipack(19)
-        NSCOUGV        = ipack(20)
-        IGCP           = ipack(21)
-        NSCOUGC        = ipack(22)
-        IGPP           = ipack(23)
-        IGWP           = ipack(24)
-        NSCOUGW        = ipack(25)
-        iNHSINC        = ipack(26) !tcm v51.26
+        IFLSTP         = ipack(10)
+        NSCOUFL        = ipack(11)
+        IVSTP          = ipack(12)
+        NSCOUV         = ipack(13)
+        ICSTP          = ipack(14)
+        NSCOUC         = ipack(15)
+        IPSTP          = ipack(16)
+        IWSTP          = ipack(17)
+        NSCOUM         = ipack(18)
+        IGEP           = ipack(19)
+        NSCOUGE        = ipack(20)
+        IGVP           = ipack(21)
+        NSCOUGV        = ipack(22)
+        IGCP           = ipack(23)
+        NSCOUGC        = ipack(24)
+        IGPP           = ipack(25)
+        IGWP           = ipack(26)
+        NSCOUGW        = ipack(27)
+        iNHSINC        = ipack(28) !tcm v51.26
         
         ttime  = dpack(1)
         GLOBALDIR=trim(adjustl(cjunk1))

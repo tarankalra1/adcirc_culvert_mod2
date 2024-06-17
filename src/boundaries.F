@@ -40,6 +40,22 @@ C.....for internal barrier boundaries with flowthrough pipes
       REAL(SZ),ALLOCATABLE ::   BARINHTR(:,:),BARINCFSBR(:,:),BARINCFSPR(:,:)
       REAL(SZ),ALLOCATABLE ::   PIPEHTR(:,:),PIPECOEFR(:,:),PIPEDIAMR(:,:)
       INTEGER, ALLOCATABLE ::  IBCONNR(:,:)
+
+!C.....for internal barrier boundaries with flowthrough culvert
+      REAL(SZ),ALLOCATABLE ::   CULVERT_BREADTH(:), CULVERT_DEPTH(:)
+      REAL(SZ),ALLOCATABLE ::   CULVERT_LENGTH(:)
+      REAL(SZ),ALLOCATABLE ::   CULVERT_GRID_LENGTH(:)
+      REAL(SZ),ALLOCATABLE ::   Z_INVERT_A(:), Z_INVERT_B(:)
+      REAL(SZ),ALLOCATABLE ::   FRIC_CULVERT_FACTOR(:), KE_ENTRANCE_LOSS(:)
+      !INTEGER, ALLOCATABLE ::   IBCONN(:)
+      ! these arrays will only be needed temporarily, between reading 
+      ! the ascii mesh file and initializing the boundaries
+      REAL(SZ),ALLOCATABLE ::   CULVERT_BREADTHR(:,:), CULVERT_DEPTHR(:,:)
+      REAL(SZ),ALLOCATABLE ::   CULVERT_LENGTHR(:,:)
+      REAL(SZ),ALLOCATABLE ::   CULVERT_GRID_LENGTHR(:,:)
+      REAL(SZ),ALLOCATABLE ::   Z_INVERT_AR(:,:), Z_INVERT_BR(:,:)
+      REAL(SZ),ALLOCATABLE ::   FRIC_CULVERT_FACTORR(:,:), KE_ENTRANCE_LOSSR(:,:)
+
       !      
       INTEGER  NOPE
       ! kmd - added for rivers in baroclinic simulation
@@ -56,7 +72,8 @@ C.....for internal barrier boundaries with flowthrough pipes
 
       INTEGER  NVEL,NVELEXT,NVELME
       INTEGER  IM,JGW,JKI,JME
-      INTEGER  NFLUXIBP,NPIPE
+      INTEGER  NFLUXIBP,NPIPE 
+      INTEGER  NCULVERT 
       integer  nfluxb,nfluxf,nfluxib,nfluxrbc,nfluxgbc
       real(sz) :: costset
       real(sz) :: anginn
@@ -64,6 +81,8 @@ C.....for internal barrier boundaries with flowthrough pipes
   
       REAL(SZ),ALLOCATABLE ::   BTRAN3(:),BTRAN4(:),BTRAN5(:)
       REAL(SZ),ALLOCATABLE ::   BTRAN6(:),BTRAN7(:),BTRAN8(:)
+      REAL(SZ),ALLOCATABLE ::   BTRAN9(:),BTRAN10(:),BTRAN11(:)
+      REAL(SZ),ALLOCATABLE ::   BTRAN12(:),BTRAN13(:)
       INTEGER, ALLOCATABLE ::   NTRAN1(:),NTRAN2(:)
 
 !     &       LBARRAY_POINTER,              !LBARRAY_POINTER(MNP) = pointer into array of land or flux boundary
@@ -151,6 +170,36 @@ C.....for internal barrier boundaries with flowthrough pipes
       type(internalFluxBoundaryWithPipes_t), allocatable :: internalFluxBoundariesWithPipes(:)
       integer :: numInternalFluxBoundariesWithPipes
       integer :: ifwpCount ! index into the internalFluxBoundariesWithPipes array
+
+      
+      ! flux boundaries where ibtype = 6,26
+      type internalFluxBoundaryWithCulvert_t
+         integer :: indexNum               ! order within the fort.14 file
+         integer :: informationID              ! xdmf ID for IBTYPE info
+         integer :: setID                      ! xdmf ID for node numbers
+         integer :: numAttributes = 12
+         integer :: attributeIDs(12) ! xdmf IDs for parameters
+         integer, allocatable :: nodes(:)
+         integer, allocatable :: ibconn(:)
+         real(8), allocatable :: barinht(:)
+         real(8), allocatable :: barincfsb(:)
+         real(8), allocatable :: barincfsp(:)
+         real(8), allocatable :: culvert_breadth(:)
+         real(8), allocatable :: culvert_depth(:)
+         real(8), allocatable :: culvert_length(:)
+         real(8), allocatable :: culvert_grid_length(:)
+         real(8), allocatable :: z_invert_a(:)
+         real(8), allocatable :: z_invert_b(:)
+         real(8), allocatable :: ke_entrance_loss(:)
+         real(8), allocatable :: fric_culvert_factor(:)
+!         real(8), allocatable :: leveeGeom(:)
+         integer, allocatable :: xdmf_nodes(:)
+         integer, allocatable :: xdmf_ibconn(:)
+      end type internalFluxBoundaryWithCulvert_t      
+      type(internalFluxBoundaryWithCulvert_t), allocatable :: internalFluxBoundariesWithCulvert(:)
+      integer :: numInternalFluxBoundariesWithCulvert
+      integer :: ifculvCount ! index into the internalFluxBoundariesWithCulvert array
+
       
       integer, parameter :: specifiedFluxBoundaryTypes(5) = (/ 2, 12, 22, 32, 52 /)
       ! 
@@ -258,12 +307,23 @@ C     ---------
       allocate ( barlanht(mnvel),barlancfsp(mnvel))
       allocate ( barinht(mnvel),barincfsb(mnvel),barincfsp(mnvel))
       allocate ( pipeht(mnvel),pipecoef(mnvel),pipediam(mnvel))
+      
+      ! Culvert properties 
+      allocate ( culvert_breadth(mnvel))
+      allocate ( culvert_depth(mnvel))
+      allocate ( culvert_length(mnvel)) 
+      allocate ( culvert_grid_length(mnvel)) 
+      allocate ( z_invert_a(mnvel), z_invert_b(mnvel))
+      allocate ( ke_entrance_loss(mnvel), fric_culvert_factor(mnvel))
+
       allocate ( ibconn(mnvel))
       allocate ( nbvv(mnbou,0:mnvel))
       allocate ( bndlen2o3(mnvel))
       allocate ( ntran1(mnvel),ntran2(mnvel))
       allocate ( btran3(mnvel),btran4(mnvel),btran5(mnvel))
       allocate ( btran6(mnvel),btran7(mnvel),btran8(mnvel))
+      allocate (btran9(mnvel),btran10(mnvel),btran11(mnvel))
+      allocate (btran12(mnvel), btran13(mnvel))
       allocate ( nelezng(mnvel))
       allocate ( zngif1(mnvel),zngif2(mnvel),zngif3(mnvel))
 
@@ -282,6 +342,16 @@ C     ---------
       pipeht = -99999.d0
       pipecoef = -99999.d0
       pipediam = -99999.d0
+      
+      culvert_breadth = -99999.d0
+      culvert_depth = -99999.d0
+      culvert_length = -99999.d0
+      culvert_grid_length = -99999.d0
+      z_invert_a = -99999.d0
+      z_invert_b = -99999.d0
+      ke_entrance_loss = -99999.d0
+      fric_culvert_factor = -99999.d0
+
       ibconn = -99999
       nbvv = -99999
       bndlen2o3 = -99999.0
@@ -312,10 +382,13 @@ C     ---------
       allocate(externalFluxBoundaries(numExternalFluxBoundaries))
       allocate(internalFluxBoundaries(numInternalFluxBoundaries))
       allocate(internalFluxBoundariesWithPipes(numInternalFluxBoundariesWithPipes))
+      allocate(internalFluxBoundariesWithCulvert(numInternalFluxBoundariesWithCulvert))
+
       sfCount = 1
       efCount = 1
       ifCount = 1
-      ifwpCount = 1      
+      ifwpCount = 1
+      ifculvCount = 1 
       do i=1,nbou
          if (nabout.eq.-1) then
             !write(6,'("i=",i0)') i !jgfdebug
@@ -352,7 +425,26 @@ C     ---------
             allocate(internalFluxBoundariesWithPipes(ifwpCount)%xdmf_nodes(nvell(i)))
             allocate(
      &         internalFluxBoundariesWithPipes(ifwpCount)%xdmf_ibconn(nvell(i)))            
-            ifwpCount = ifwpCount + 1            
+            ifwpCount = ifwpCount + 1 
+         case(6,26)
+            write(6,*) "i am on line414"
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%nodes(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%ibconn(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%barinht(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%barincfsb(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%barincfsp(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%culvert_breadth(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%culvert_depth(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%culvert_length(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%culvert_grid_length(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_a(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_b(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%ke_entrance_loss(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%fric_culvert_factor(nvell(i)))
+            allocate(internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_nodes(nvell(i)))
+            allocate(
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_ibconn(nvell(i)))            
+            ifculvCount = ifculvCount + 1           
          case default
              write(6,'(a,i0,a)') "ERROR: The boundary type ",ibtype_orig(i),
      &        " was found in the file but is not valid."
@@ -395,6 +487,26 @@ C     ---------
          internalFluxBoundariesWithPipes(i)%xdmf_nodes(:) = -99999
          internalFluxBoundariesWithPipes(i)%xdmf_ibconn(:) = -99999
       end do
+      do i=1,numInternalFluxBoundariesWithCulvert 
+            write(6,*) "i am on line472"
+         internalFluxBoundariesWithCulvert(i)%nodes(:) = -99999
+         internalFluxBoundariesWithCulvert(i)%ibconn(:) = -99999
+         internalFluxBoundariesWithCulvert(i)%barinht(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%barincfsb(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%barincfsp(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%culvert_breadth(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%culvert_depth(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%culvert_length(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%culvert_grid_length(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%z_invert_a(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%z_invert_b(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%ke_entrance_loss(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%fric_culvert_factor(:) = -99999.d0
+         internalFluxBoundariesWithCulvert(i)%xdmf_nodes(:) = -99999
+         internalFluxBoundariesWithCulvert(i)%xdmf_ibconn(:) = -99999
+            write(6,*) "i am on line485"
+      end do
+      
       
       !------------------------------------------------------------------
       end subroutine allocateBoundaryArrays
@@ -436,11 +548,19 @@ C     ------------------------------------------------------------------
       allocate ( pipeht(mnvel),pipecoef(mnvel),pipediam(mnvel))
       allocate ( ibconn(mnvel))  
 
+      allocate ( culvert_breadth(mnvel), culvert_depth(mnvel))
+      allocate ( culvert_length(mnvel))
+      allocate ( culvert_grid_length(mnvel))
+      allocate ( z_invert_a(mnvel), z_invert_b(mnvel))
+      allocate ( ke_entrance_loss(mnvel), fric_culvert_factor(mnvel) )
+      
       allocate ( nbvv(mnbou,0:mnvel))
       allocate ( nvell(mnbou), ibtype(mnbou), ibtype_orig(mnbou))
       allocate ( ntran1(mnvel),ntran2(mnvel))
       allocate ( btran3(mnvel),btran4(mnvel),btran5(mnvel))
       allocate ( btran6(mnvel),btran7(mnvel),btran8(mnvel))
+      allocate ( btran9(mnvel),btran10(mnvel),btran11(mnvel))
+      allocate (btran12(mnvel),btran13(mnvel))
       allocate ( nelezng(mnvel))
       allocate ( zngif1(mnvel),zngif2(mnvel),zngif3(mnvel))
       ! kmd - added for rivers in baroclinic simulation
@@ -491,9 +611,10 @@ C     ------------------------------------------------------------------
          select case(ibtype(k))
          case(4,24)
             nweir = nweir + nvell(k)
-         case(5,25)
-            print *, 'error: ibtype 5 and 25 not supported by adcprep.'
-            CALL EXIT(1)
+         case(5,25,6,26)
+            nweir = nweir + nvell(k)
+            !print *, 'error: ibtype 5 and 25 not supported by adcprep.'
+            !CALL EXIT(1)
          case default
             ! no action required for other boundary types
          end select
@@ -516,7 +637,8 @@ C     ------------------------------------------------------------------
       ! no longer be necessary.
       !-----------------------------------------------------------------
       subroutine getBoundariesForPrep(p_nvdll, p_nvell, p_ibtypee, p_nbdv, lbcode, 
-     &   p_ibtype, p_nbvv, p_ibconnr, bar1, bar2, bar3, weir, 
+     &   p_ibtype, p_nbvv, p_ibconnr, bar1, bar2, bar3, bar4, bar5,
+     &   bar6, bar7, bar8, bar9, bar10, bar11, weir, 
      &   weird, iden, nfover, exist_flux, flux14_ary)
       implicit none
       integer, intent(out) :: p_nvdll(:)
@@ -529,6 +651,11 @@ C     ------------------------------------------------------------------
       real(sz), intent(out) :: bar1(:,:)
       real(sz), intent(out) :: bar2(:,:)
       real(sz), intent(out) :: bar3(:,:)
+      real(sz), intent(out) :: bar4(:,:)
+      real(sz), intent(out) :: bar5(:,:)
+      real(sz), intent(out) :: bar6(:,:)
+      real(sz), intent(out) :: bar7(:,:), bar8(:,:)
+      real(sz), intent(out) :: bar9(:,:), bar10(:,:), bar11(:,:)
       integer, intent(out) :: weir(:)
       integer, intent(out) :: weird(:)
       integer, allocatable, intent(out) :: flux14_ary(:)
@@ -583,8 +710,40 @@ C     ------------------------------------------------------------------
                weird(nweir) = ibconnr(k,i)
             enddo
          case(5,25)
-            print *, 'error: ibtype 5 and 25 not supported by adcprep.'
-            CALL EXIT(1)
+            do i=1,nvell(k)
+               bar1(k,i) = barinhtr(k,i)
+               bar2(k,i) = barincfsbr(k,i)
+               bar3(k,i) = barincfspr(k,i)
+               bar4(k,i) = pipehtr(k,i)
+               bar5(k,i) = pipecoefr(k,i)
+               bar6(k,i) = pipediamr(k,i)
+               !--construct list of weir nodes and their duals
+               nweir = nweir + 1
+               weir(nweir) = nbvv(k,i)
+               weird(nweir) = ibconnr(k,i)
+            end do 
+         case(6,26)
+            do i=1,nvell(k)
+               bar1(k,i) = barinhtr(k,i)
+               bar2(k,i) = barincfsbr(k,i)
+               bar3(k,i) = barincfspr(k,i)
+               bar4(k,i) = culvert_breadthr(k,i)
+               bar5(k,i) = culvert_depthr(k,i)
+               bar6(k,i) = culvert_lengthr(k,i)
+               bar7(k,i) = culvert_grid_lengthr(k,i)
+               bar8(k,i) = z_invert_ar(k,i)
+               bar9(k,i) = z_invert_br(k,i)
+               bar10(k,i) = ke_entrance_lossr(k,i)
+               bar11(k,i) = fric_culvert_factorr(k,i)
+               !--construct list of weir nodes and their duals
+               nweir = nweir + 1
+               weir(nweir) = nbvv(k,i)
+               weird(nweir) = ibconnr(k,i)
+            end do 
+           ! print *, 'error: ibtype 5 and 25 not supported by adcprep.'
+           ! CALL EXIT(1)
+           ! print *, 'error: ibtype 5 and 25 not supported by adcprep.'
+           ! CALL EXIT(1)
          case default
             write(6,'(a,i0,a)') 'ERROR: ibtype ',ibtype(k),
      &          ' not supported by adcprep.'
@@ -613,6 +772,17 @@ C     ------------------------------------------------------------------
       allocate ( pipehtr(mnbou,mnvel),pipecoefr(mnbou,mnvel) )
       allocate ( pipediamr(mnbou,mnvel) )
       allocate ( ibconnr(mnbou,mnvel) )
+      
+      ! TSK - notice r 
+      allocate ( culvert_breadthr(mnbou,mnvel) )
+      allocate ( culvert_depthr(mnbou,mnvel) )
+      allocate ( culvert_lengthr(mnbou,mnvel) )
+      allocate ( culvert_grid_lengthr(mnbou,mnvel) )
+      allocate ( z_invert_ar(mnbou,mnvel) )
+      allocate ( z_invert_br(mnbou,mnvel) )
+      allocate ( ke_entrance_lossr(mnbou,mnvel) )
+      allocate ( fric_culvert_factorr(mnbou,mnvel) )
+
 C     ------------------------------------------------------------------
       end subroutine allocateFluxBoundaryArrayTemporaries
 C     ------------------------------------------------------------------
@@ -635,6 +805,15 @@ C     ------------------------------------------------------------------
       deallocate ( barincfspr )
       deallocate ( pipehtr,pipecoefr )
       deallocate ( pipediamr )
+
+      ! TSK - notice r 
+      deallocate ( culvert_breadthr, culvert_depthr )
+      deallocate ( culvert_lengthr )
+      deallocate ( culvert_grid_lengthr )
+      deallocate ( z_invert_ar, z_invert_br )
+      deallocate ( ke_entrance_lossr )
+      deallocate ( fric_culvert_factorr )
+
       deallocate ( ibconnr )
 C     ------------------------------------------------------------------
       end subroutine freeFluxBoundaryArrayTemporaries

@@ -166,6 +166,7 @@
       numExternalFluxBoundaries = 0
       numInternalFluxBoundaries = 0
       numInternalFluxBoundariesWithPipes = 0
+      numInternalFluxBoundariesWithCulvert = 0
       !
       ! reading the file
       read(iunit,'(A80)',err=10,end=20,iostat=ios) agrid
@@ -243,6 +244,10 @@
              nvel_count = nvel_count + nvell(k)
          case(5,25)
              numInternalFluxBoundariesWithPipes = numInternalFluxBoundariesWithPipes + 1
+             nvel_count = nvel_count + nvell(k)
+         case(6,26)
+             numInternalFluxBoundariesWithCulvert =
+     &               numInternalFluxBoundariesWithCulvert + 1
              nvel_count = nvel_count + nvell(k)
          case default
              write(scratchMessage, 1030) ibtype_orig(k)
@@ -357,6 +362,11 @@
      &      // 'pipes (5,etc): ",i0,".")'
          write(scratchMessage,scratchFormat) numInternalFluxBoundariesWithPipes
          call logMessage(DEBUG,trim(scratchMessage))
+         ! levee boundaries with culverts
+         scratchFormat = '("Number of internal flux boundaries with '
+     &      // 'culverts (6,etc): ",i0,".")'
+         write(scratchMessage,scratchFormat) numInternalFluxBoundariesWithCulvert
+         call logMessage(DEBUG,trim(scratchMessage))
       endif
       !
       call allocateNodalAndElementalArrays()
@@ -418,9 +428,9 @@
       efCount = 1
       ifCount = 1
       ifwpCount = 1
+      ifculvCount = 1 
       NPERSEG = 0  ;
       NNPERBC = 0  ;
-
       do k = 1, nbou
          read(unit=iunit,fmt=*,err=10,end=20,iostat=ios) nvell(k), ibtype_orig(k)
          lineNum = lineNum + 1
@@ -511,6 +521,36 @@
                lineNum = lineNum + 1
             end do
             ifwpCount = ifwpCount + 1
+         !
+         ! Culvert 
+         case(6,26)
+            internalFluxBoundariesWithCulvert(ifculvCount)%indexNum = k
+            do j = 1, nvell(k)
+               read(unit=iunit,fmt=*,err=10,end=20,iostat=ios)
+     &                        n1,
+     &                        n2,
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%barinht(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%barincfsb(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%barincfsp(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%culvert_breadth(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%culvert_depth(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%culvert_length(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%culvert_grid_length(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_a(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_b(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%ke_entrance_loss(j),
+     &         internalFluxBoundariesWithCulvert(ifculvCount)%fric_culvert_factor(j)
+               internalFluxBoundariesWithCulvert(ifculvCount)%nodes(j) =
+     &                        find(node_dict, n1)
+               internalFluxBoundariesWithCulvert(ifculvCount)%ibconn(j) = 
+     &                        find(node_dict, n2)          
+               internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_nodes(j) =
+     &                        internalFluxBoundariesWithCulvert(ifculvCount)%nodes(j) - 1
+               internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_ibconn(j) =
+     &                        internalFluxBoundariesWithCulvert(ifculvCount)%ibconn(j) - 1
+               lineNum = lineNum + 1
+            end do
+            ifculvCount = ifculvCount + 1
          case(94)
 !...        Periodic boundary, read in a pair of nodes 
             !c Allocate memory, if there is a periodic bc segment c!
@@ -829,6 +869,7 @@
       numExternalFluxBoundaries = 0
       numInternalFluxBoundaries = 0
       numInternalFluxBoundariesWithPipes = 0
+      numInternalFluxBoundariesWithCulvert = 0
       nope = 0
       neta = 0
       nbou = 0
@@ -888,6 +929,9 @@
                   numInternalFluxBoundaries = numInternalFluxBoundaries + 1
                case(5,25)
                   numInternalFluxBoundariesWithPipes = numInternalFluxBoundariesWithPipes + 1
+               case(6,26)
+                  numInternalFluxBoundariesWithCulvert =
+     &                                 numInternalFluxBoundariesWithCulvert + 1
                case default
                   scratchFormat = 'Mesh file contains IBTYPE=",i0," '
      &               // 'which is not a valid flux boundary type.")'
@@ -935,6 +979,10 @@
      &                 // ' : ",i0,".")'
       write(scratchMessage,scratchFormat) numInternalFluxBoundariesWithPipes
       call logMessage(INFO,scratchMessage)
+      scratchFormat = '("Num. int. flux bnd. with culvert '
+     &                 // ' : ",i0,".")'
+      write(scratchMessage,scratchFormat)numInternalFluxBoundariesWithCulvert
+      call logMessage(INFO,scratchMessage)
       !
       ! populate nvdll (adcirc array representing number of nodes on each
       ! elevation boundary segment) and nvell (adcirc array representing
@@ -977,6 +1025,7 @@
       efCount = 1
       ifCount = 1
       ifwpCount = 1
+      ifculvCount = 1
       do setIndex=0,numSets-1
          attStart = firstSetAttributeIndex(setIndex)
          call xdmfRetrieveSetValueType(xdmfFortranObj, setIndex, setDataType)
@@ -1140,6 +1189,91 @@
                internalFluxBoundariesWithPipes(ifwpCount)%ibconn =
      &             internalFluxBoundariesWithPipes(ifwpCount)%xdmf_ibconn + 1
                ifwpCount = ifwpCount + 1
+            case(6,26)  ! culvert 
+               internalFluxBoundariesWithCulvert(ifculvCount)%indexNum = fluxCount
+               ! get the node numbers on the boundary
+               call xdmfRetrieveSetValues(xdmfFortranObj, setIndex,
+     &             internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_nodes,
+     &             setDataType, setSize(setIndex),
+     &             startIndex, arrayStride, valueStride)
+               ! convert node numbers from 0 starting index (xdmf-style) to
+               ! 1 starting index (fortran-style)
+               internalFluxBoundariesWithCulvert(ifculvCount)%nodes =
+     &             internalFluxBoundaries(ifCulvCount)%xdmf_nodes + 1
+               do i=attStart,attStart+6
+                  call xdmfRetrieveAttributeName(xdmfFortranObj, i, itemName, nameLength)
+                  call replaceNullsWithSpaces(itemName)
+                  select case(trim(itemName))
+                  case("IBCONN")  ! paired (i.e., back face) nodes
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &                  internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_ibconn,
+     &                  XDMF_ARRAY_TYPE_INT32,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("BARINHT") ! barrier height at each node and its paired node
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &                   internalFluxBoundariesWithCulvert(ifculvCount)%barinht,
+     &                  XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("BARINCFSB") ! coefficient of free surface sub critical flow
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &                   internalFluxBoundariesWithCulvert(ifculvCount)%barincfsb,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("BARINCFSP") ! coefficient of free surface super critical flow
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &                   internalFluxBoundariesWithCulvert(ifculvCount)%barincfsp,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("CULVERT_BREADTH") ! culvert breadth at each node and its paired node
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &               internalFluxBoundariesWithCulvert(ifculvCount)%culvert_breadth,
+     &                  XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("CULVERT_DEPTH") ! culvert depth
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &               internalFluxBoundariesWithCulvert(ifculvCount)%culvert_depth,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("CULVERT_LENGTH") ! culvert length
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &               internalFluxBoundariesWithCulvert(ifculvCount)%culvert_length,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("CULVERT_GRID_LENGTH") ! culvert grid length at each node and its paired node
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &               internalFluxBoundariesWithCulvert(ifculvCount)%culvert_grid_length,
+     &                  XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("Z_INVERT_A") ! z_invert_a
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &                 internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_a,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("Z_INVERT_B") ! z_invert_b
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &                 internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_b,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("KE_ENTRANCE_LOSS") ! ke_entrance_loss
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &               internalFluxBoundariesWithCulvert(ifculvCount)%ke_entrance_loss,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case("FRIC_CULVERT_FACTOR") ! fric_culvert_factor
+                     call xdmfRetrieveAttributeValues(xdmfFortranObj, i,
+     &            internalFluxBoundariesWithCulvert(ifculvCount)%fric_culvert_factor,
+     &                   XDMF_ARRAY_TYPE_FLOAT64,
+     &                   nvell(fluxCount), startIndex, arrayStride, valueStride)
+                  case default
+                     scratchFormat =
+     &                '("Unrecognized boundary attribute : ",a,".")'
+                     write(scratchMessage,scratchFormat) trim(itemName)
+                     call allMessage(ERROR,scratchMessage)
+                  end select
+               end do
+               internalFluxBoundariesWithCulvert(ifculvCount)%ibconn =
+     &             internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_ibconn + 1
+               ifculvCount = ifculvCount + 1
             case default
                 scratchFormat = '("The boundary type ",i0," '
      &                 // 'was found in the files but is not valid.")'
@@ -1190,6 +1324,7 @@
       efCount = 1
       ifCount = 1
       ifwpCount = 1
+      ifculvCount = 1
       ! populate adcirc-native arrays
       do fluxCount=1,nbou
          select case(ibtype_orig(fluxCount))  
@@ -1236,6 +1371,35 @@
             pipediamr(fluxCount,1:nvell(fluxCount))
      &             = internalFluxBoundariesWithPipes(ifwpCount)%pipediam
             ifwpCount = ifwpCount + 1
+         case(6,26)  ! internal barrier boundary (e.g., subgrid scale levee)
+            ! populate adcirc-native arrays
+            nbvv(fluxCount,1:nvell(fluxCount))
+     &             = internalFluxBoundariesWithCulvert(ifculvCount)%nodes
+            ibconnr(fluxCount,1:nvell(fluxCount))
+     &             = internalFluxBoundariesWithCulvert(ifculvCount)%ibconn
+            barinhtr(fluxCount,1:nvell(fluxCount))
+     &            = internalFluxBoundariesWithCulvert(ifculvCount)%barinht
+            barincfsbr(fluxCount,1:nvell(fluxCount))
+     &             = internalFluxBoundariesWithCulvert(ifculvCount)%barincfsb
+            barincfspr(fluxCount,1:nvell(fluxCount))
+     &             = internalFluxBoundariesWithCulvert(ifculvCount)%barincfsp
+            culvert_breadthr(fluxCount,1:nvell(fluxCount))
+     &           = internalFluxBoundariesWithCulvert(ifculvCount)%culvert_breadth
+            culvert_depthr(fluxCount,1:nvell(fluxCount))
+     &           = internalFluxBoundariesWithCulvert(ifculvCount)%culvert_depth
+            culvert_lengthr(fluxCount,1:nvell(fluxCount))
+     &           = internalFluxBoundariesWithCulvert(ifculvCount)%culvert_length
+            culvert_grid_lengthr(fluxCount,1:nvell(fluxCount))
+     &        =internalFluxBoundariesWithCulvert(ifculvCount)%culvert_grid_length
+            z_invert_ar(fluxCount,1:nvell(fluxCount))
+     &           = internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_a
+            z_invert_br(fluxCount,1:nvell(fluxCount))
+     &           = internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_b
+            ke_entrance_lossr(fluxCount,1:nvell(fluxCount))
+     &          = internalFluxBoundariesWithCulvert(ifculvCount)%ke_entrance_loss
+            fric_culvert_factorr(fluxCount,1:nvell(fluxCount))
+     &          = internalFluxBoundariesWithCulvert(ifculvCount)%fric_culvert_factor
+            ifculvCount = ifculvCount + 1
          case default
             write(6,*) "Unrecognized boundary type ",ibtype_orig(fluxCount)
          end select
@@ -1716,7 +1880,8 @@
       ! each segment and setting up boundary arrays
       NBOULOOP: DO K=1,NBOU
 !        write out flow boundary information to unit 16
-         IF((IBTYPE(K).EQ.4).OR.(IBTYPE(K).EQ.24)) THEN
+         IF((IBTYPE(K).EQ.4).OR.(IBTYPE(K).EQ.24)
+     &         .OR.(IBTYPE(K).eq.6).OR.(IBTYPE(K).EQ.26)) THEN
             WRITE(16,28) K,NVELL(K),K,2*NVELL(K)
  28         FORMAT(///,5X,'TOTAL NUMBER OF PAIRS FOR FLOW BOUNDARY',
      &           ' SEGMENT',2X,i0,2X,'=',2X,i0,
@@ -1877,10 +2042,18 @@
      &               'ARRIER, PIPE FRICTION COEFFICIENT, PIPE DIAMETER',
      &          /,7X,'AND THE APPROPRIATE PIPE FLOW FORMULA',/,
      &            7X,'FREE TANGENTIAL SLIP IS ALLOWED',/)
+         CASE(6,26)
+           NFLUXIB=1
+           WRITE(16,2360)
+ 2360      FORMAT(5X,'THIS SEGMENT IS AN INTERNAL BARRIER BOUNDARY:',/,
+     &            7X,'WITH ADDITIONAL CROSS BARRIER PIPES ',
+     &               'LOCATED UNDER THE CROWN ',/,
+     &            7X,'CROSS BARRIER FLOW IS TREATED AS A NATURAL',/)
+
          CASE(30)
            NFluxRBC=1
-           WRITE(16,2360)
- 2360      FORMAT(5X,'This segment is an outward radiating boundary:',/,
+           WRITE(16,2361)
+ 2361      FORMAT(5X,'This segment is an outward radiating boundary:',/,
      &            7X,'the GWCE is forced with normal flux.  A wave ',
      &               'radiation condition',
      &            7X,'is used to relate the time derivative of the ',
@@ -1892,7 +2065,7 @@
          CASE(32)
            NFluxRBC=1
            NFluxF=1
-           WRITE(16,2356)
+           WRITE(16,2362)
  2362      FORMAT(5X,'This segment is a combined specified normal ',
      &               'flux and outward radiating boundary.',/,
      &            7X,'The GWCE is forced with the total normal flux ',
@@ -1962,6 +2135,10 @@
          case(5,25)
             nprbi = 2
             npipe = 1
+         case(6,26)
+            nprbi =  2 
+            nculvert = 1
+            npipe = 0 
          case default
             nprbi = 1
             npipe = 0
@@ -1991,6 +2168,16 @@
                      BTRAN7(I)=PIPECOEFR(K,I)
                      BTRAN8(I)=PIPEDIAMR(K,I)
                   ENDIF
+                  IF(NCULVERT.EQ.1) THEN
+                     BTRAN6(I)=CULVERT_BREADTHR(K,I)
+                     BTRAN7(I)=CULVERT_DEPTHR(K,I)
+                     BTRAN8(I)=CULVERT_LENGTHR(K,I)
+                     BTRAN9(I)=CULVERT_GRID_LENGTHR(K,I)
+                     BTRAN10(I)=Z_INVERT_AR(K,I)
+                     BTRAN11(I)=Z_INVERT_BR(K,I)
+                     BTRAN12(I)=KE_ENTRANCE_LOSSR(K,I)
+                     BTRAN13(I)=FRIC_CULVERT_FACTORR(K,I)
+                  ENDIF
                END DO  !I=1,NVELL(K)
 
                DO I=1,NVELL(K)
@@ -2003,6 +2190,16 @@
                      PIPEHTR(K,I)=BTRAN6(NVELL(K)+1-I)
                      PIPECOEFR(K,I)=BTRAN7(NVELL(K)+1-I)
                      PIPEDIAMR(K,I)=BTRAN8(NVELL(K)+1-I)
+                  ENDIF
+                  IF(NCULVERT.EQ.1) THEN
+                     CULVERT_BREADTHR(K,I)=BTRAN6(NVELL(K)+1-I)
+                     CULVERT_DEPTHR(K,I)=BTRAN7(NVELL(K)+1-I)
+                     CULVERT_LENGTHR(K,I)=BTRAN8(NVELL(K)+1-I)
+                     CULVERT_GRID_LENGTHR(K,I)=BTRAN9(NVELL(K)+1-I)
+                     Z_INVERT_AR(K,I)=BTRAN10(NVELL(K)+1-I)
+                     Z_INVERT_BR(K,I)=BTRAN11(NVELL(K)+1-I)
+                     KE_ENTRANCE_LOSSR(K,I)=BTRAN12(NVELL(K)+1-I)
+                     FRIC_CULVERT_FACTORR(K,I)=BTRAN13(NVELL(K)+1-I)
                   ENDIF
                END DO  !I=1,NVELL(K)
             ENDIF
@@ -2029,6 +2226,18 @@
                   WRITE(16,1845)
  1845             FORMAT(/,5X,'BACK FACE OF INTERNAL BARRIER BOUNDARY',
      &                 ' WITH CROSS BARRIER PIPES',/)
+               ENDIF
+            ENDIF
+
+!...        WRITE OUT ADDITIONAL HEADER FOR INTERNAL BARRIER BOUNDARIES WITH
+!...        CULVERT 
+            IF((IBTYPE(K).EQ.6).OR.(IBTYPE(K).EQ.26)) THEN
+               IF(IPRBI.EQ.3) THEN
+                  WRITE(16,1846)
+ 1846             FORMAT(/,5X,'FRONT FACE OF CULVERT',/)
+               ELSE
+                  WRITE(16,1847)
+ 1847             FORMAT(/,5X,'BACK FACE OF CULVERT',/)
                ENDIF
             ENDIF
 
@@ -2390,6 +2599,23 @@
                   PIPEDIAM(JGW)=PIPEDIAMR(K,I)
                ENDIF
 
+!...........   LOAD INTERNAL BARRIER WITH PIPES BOUNDARY INFORMATION INTO
+!...........   THE CORRECT VECTORS
+               IF((IBTYPE(K).EQ.6).OR.(IBTYPE(K).EQ.26)) THEN
+                  IBCONN(JGW)=IBCONNR(K,I)
+                  BARINHT(JGW)=BARINHTR(K,I)
+                  BARINCFSB(JGW)=BARINCFSBR(K,I)
+                  BARINCFSP(JGW)=BARINCFSPR(K,I)
+                  CULVERT_BREADTH(JGW)=CULVERT_BREADTHR(K,I)
+                  CULVERT_DEPTH(JGW)=CULVERT_DEPTHR(K,I)
+                  CULVERT_LENGTH(JGW)=CULVERT_LENGTHR(K,I)
+                  CULVERT_GRID_LENGTH(JGW)=CULVERT_GRID_LENGTHR(K,I)
+                  Z_INVERT_A(JGW)=Z_INVERT_AR(K,I)
+                  Z_INVERT_B(JGW)=Z_INVERT_BR(K,I)
+                  FRIC_CULVERT_FACTOR(JGW)=FRIC_CULVERT_FACTORR(K,I)
+                  KE_ENTRANCE_LOSS(JGW)=KE_ENTRANCE_LOSSR(K,I)
+               ENDIF
+
 !...........   WRITE OUT BOUNDARY CONDITION ARRAY INFORMATION
 
                WRITE(16,1857) JGW,JME,ME2GW(JME),NBV(JGW),LBCODEI(JGW),
@@ -2438,7 +2664,8 @@
                ENDIF
 
 !...........   CHECK INTERNAL BARRIER WITH PIPES BARRIER HEIGHTS AGAINST DEPTHS
-               IF((IBTYPE(K).EQ.5).OR.(IBTYPE(K).EQ.25)) THEN
+               IF((IBTYPE(K).EQ.5).OR.(IBTYPE(K).EQ.25)
+     &            .OR.(IBTYPE(K).EQ.6).OR.(IBTYPE(K).EQ.26)) THEN  !nld) THEN
                   IF(BARINHT(JGW).LT.-DP(NBV(JGW))) THEN
                      write(scratchMessage,8370)
      &                    JGW,NBV(JGW),BARINHT(JGW),DP(NBV(JGW))
@@ -2481,7 +2708,8 @@
 !...  APPROPRIATE ACTION
                IF((IBTYPE(K).EQ.4).OR.(IBTYPE(K).EQ.24).OR.
      &              (IBTYPE(K).EQ.5)
-     &              .OR.(IBTYPE(K).EQ.25)) THEN
+     &              .OR.(IBTYPE(K).EQ.25) 
+     &              .OR.(IBTYPE(K).EQ.6).OR.(IBTYPE(K).EQ.26)) THEN ! culvert
                   DO ICK=1,NVELEXT
 !...  CHECK IF OVERLAP EXISTS
                      IF(NBV(ICK).EQ.NBV(JGW)) THEN
@@ -2524,6 +2752,8 @@
                         ENDIF
                         IF(((IBTYPE(K).EQ.4).AND.(LBCODEI(ICK).EQ.10))
      &                       .OR.((IBTYPE(K).EQ.5)
+     &                       .AND.(LBCODEI(ICK).EQ.10)) 
+     &                       .OR.((IBTYPE(K).EQ.6) ! culvert
      &                       .AND.(LBCODEI(ICK).EQ.10))) THEN
                            WRITE(16,8569) JGW,ICK,ICK
  8569                      FORMAT(1X,'DUE TO LEGAL OVERLAPPING OF ',
@@ -2539,6 +2769,8 @@
                         ENDIF
                         IF(((IBTYPE(K).EQ.24).AND.(LBCODEI(ICK).EQ.10))
      &                       .OR.((IBTYPE(K).EQ.25)
+     &                       .AND.(LBCODEI(ICK).EQ.10)) 
+     &                       .OR.((IBTYPE(K).EQ.26)
      &                       .AND.(LBCODEI(ICK).EQ.10))) THEN
                            WRITE(16,8570) JGW,ICK,ICK
  8570                      FORMAT(1X,'DUE TO LEGAL OVERLAPPING OF ',
@@ -2696,6 +2928,46 @@
             ENDIF
          END DO
       ENDIF
+C  Scjjwm001 - end add
+c  !nld copied and modified from above for pumps emh added
+C...IF ANY INTERNAL BARRIER BOUNDARIES WITH PUMPS emh added
+C.....WERE SPECIFIED, (NFLUXPMP=1) emh added
+C.....WRITE INTERNAL BARRIER BOUNDARY INFORMATION WITH CROSS emh added
+C.....BARRIER PUMP INFORMATION TO UNIT 16 FILE
+
+!jjwm001 - begin add
+!.....BARRIER PIPE INFORMATION TO UNIT 16 FILE
+      IF(NFLUXIB.EQ.1) THEN
+!.....   WRITE OUT CULVERT
+         WRITE(16,1112)
+         WRITE(16,2329)    
+ 2329   FORMAT(//,7X,'NODE',4X,'CONNECTED NODE',4X,'BARRIER HEIGHT',
+     &                4X,'SUB-CRIT INT BAR COEF',
+     &                4X,'SUPER-CRIT INT BAR COEF',
+     &                4X,'CULVERT_BREADTH   ',
+     &                4X,'CULVERT_DEPTH',
+     &                4X,'CULVERT_LENGTH',
+     &                4X,'CULVERT_GRID_LENGTH',
+     &                4X,'Z_INVERT_A    ',
+     &                4X,'Z_INVERT_B    ',
+     &                4X,'KE_ENTRANCE_LOSS',
+     &                4X,'FRIC_CULVERT_FACTOR',/)
+        DO J=1,NVEL
+          IF((LBCODEI(J).EQ.6).OR.(LBCODEI(J).EQ.26)) THEN
+            WRITE(16,2330) NBV(J),IBCONN(J),BARINHT(J),
+     &                     BARINCFSB(J),BARINCFSP(J),
+     &                     CULVERT_BREADTH(J),
+     &                 CULVERT_DEPTH(J), CULVERT_LENGTH(J),
+     &                 CULVERT_GRID_LENGTH(J),
+     &                 Z_INVERT_A(J), Z_INVERT_B(J),
+     &                 KE_ENTRANCE_LOSS(J), FRIC_CULVERT_FACTOR(J)
+ 2330       FORMAT(3X,I8,5X,I8,4X,F14.5,8X,F12.3,12X,F12.3,
+     &              2X,F10.2,2X,F10.2,2X,F10.2, 2X, F10.2,
+     &              2X,F10.2,2X,F10.2,2X,F10.2,2X,F10.2)
+          ENDIF
+       END DO
+      ENDIF
+
 !jjwm001 - end add
       ! jgf51.11.18: Free memory associated with the reading of the
       ! levee and culvert parameters since it is no longer needed

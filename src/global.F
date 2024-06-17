@@ -123,6 +123,7 @@ C     in messenger module
 C
 C     global number of elevation, velocity, and meteorological stations
       integer :: nstae_g, nstav_g, nstam_g
+      integer :: nstafl_g 
       integer :: nstac_g     ! number of concentration stations
 C
 C     jgf49.44: These variables represent fulldomain arrays and are
@@ -135,6 +136,7 @@ C     for writing fulldomain hotstart files.
       REAL(SZ), ALLOCATABLE, TARGET :: EtaDisc_g(:)
       REAL(SZ), ALLOCATABLE, TARGET :: UU2_g(:)
       REAL(SZ), ALLOCATABLE, TARGET :: VV2_g(:)
+      REAL(SZ), ALLOCATABLE, TARGET :: QN2_FLUX_g(:)
       REAL(SZ), ALLOCATABLE, TARGET :: CH1_g(:)
       INTEGER, ALLOCATABLE, TARGET :: labels_g(:)
       INTEGER, ALLOCATABLE, TARGET :: NodeCode_g(:)
@@ -179,6 +181,7 @@ C     for writing fulldomain hotstart files.
       
       ! mappings from subdomain to fulldomain for stations
       integer,allocatable,target :: imap_stae_lg(:)
+      integer,allocatable,target :: imap_stafl_lg(:)
       integer,allocatable,target :: imap_stav_lg(:)
       integer,allocatable,target :: imap_stam_lg(:)
       integer,allocatable,target :: imap_stac_lg(:)
@@ -231,9 +234,11 @@ c.
       !jgf50.44: Added variable to record the time that the min or max
       ! has occurred
       REAL(SZ),ALLOCATABLE, TARGET ::  ETA1(:), ETA2(:), UU2(:), VV2(:)
+      REAL(SZ),ALLOCATABLE, TARGET ::  QN2_FLUX(:)
       REAL(SZ),ALLOCATABLE, TARGET ::  ETAMAX(:) ! v46.50 sb 11/11/2006
       REAL(SZ),ALLOCATABLE, TARGET ::  UMAX(:) ! v46.50 sb 11/11/2006
       REAL(SZ),ALLOCATABLE, TARGET ::  ET00(:), UU00(:), VV00(:)
+      REAL(SZ),ALLOCATABLE, TARGET ::  QN2_FLUX_00(:) 
       REAL(SZ),ALLOCATABLE, TARGET ::  RMP00(:), RMU00(:), RMV00(:)
       REAL(SZ),ALLOCATABLE, TARGET ::  RMICE00(:), CICEOUT(:) !v49.64.01 tcm -added for ice concentration
 
@@ -334,6 +339,13 @@ Cobell -  Added the following for output of ESL at end of run
       real(8), allocatable, target :: slev(:)! longitudes of current vel sta
       real(8), allocatable, target :: sfev(:)! latitudes of current vel sta
 
+      ! spatial interpolating factors for flux stations
+      real(sz),allocatable, target :: staifl1(:),staifl2(:),staifl3(:)
+      real(8), allocatable, target :: xffl(:) ! x coords of flux stations
+      real(8), allocatable, target :: yffl(:) ! y coords of flux stations
+      real(8), allocatable, target :: slfll(:)! longitudes of flux sta
+      real(8), allocatable, target :: sffll(:)! latitudes of flux sta
+
       ! spatial interpolating factors for velocity stations
       real(sz),allocatable, target ::   staiv1(:),staiv2(:),staiv3(:)
       real(8), allocatable, target ::   xec(:),yec(:),slec(:),sfec(:)
@@ -385,10 +397,11 @@ C    kmd48.33bc - added variables for the levels of no motion and top temperatur
       INTEGER,ALLOCATABLE ::    NIBNODECODE(:)
       !
       ! lists of elements containing each station 
-      integer, allocatable, target :: nnc(:) ! concentration station elements
-      integer, allocatable, target :: nne(:) ! elevation station elements
-      integer, allocatable, target :: nnv(:) ! velocity station elements
-      integer, allocatable, target :: nnm(:) ! meteorological station elements
+      integer, allocatable, target :: nnc(:)  ! concentration station elements
+      integer, allocatable, target :: nne(:)  ! elevation station elements
+      integer, allocatable, target :: nnfl(:) ! Flux from culvert station elements
+      integer, allocatable, target :: nnv(:)  ! velocity station elements
+      integer, allocatable, target :: nnm(:)  ! meteorological station elements
       !
       INTEGER,ALLOCATABLE ::    IPV(:)
 C
@@ -492,6 +505,7 @@ C     starting and ending time step for output when the time step
 C     size has changed after a hotstart. 
       REAL(SZ) TOUTSC
       REAL(SZ) TOUTSE,TOUTFE
+      REAL(SZ) TOUTSFL, TOUTFFL
       REAL(SZ) TOUTSV,TOUTFV
       REAL(SZ) TOUTFGC, TOUTFGE, TOUTFGV, TOUTFGW, TOUTF_TVW
       REAL(SZ) TOUTFM, TOUTSGC, TOUTSGE, TOUTSGV, TOUTSGW, TOUTSM, TOUTS_TVW
@@ -503,7 +517,10 @@ C     size has changed after a hotstart.
       INTEGER  NFFR
       INTEGER  NFOVER,NOLICAT,NOUTC
       INTEGER  NOUTE,NSPOOLE,NOUTV,NSPOOLV
+      INTEGER :: NOUTFL, NSPOOLFL
+      INTEGER :: NFLAFL, NTCYSFL, NTCYFFL,  NSTAFL, NTRSPFL
       INTEGER  NRAMP,NRS,NSTAE,NSTAV,NT,NTCYFE
+      INTEGER  NFLAE
       INTEGER  NTCYFV,NTCYSE,NTCYSV,NTIF,NTIP,NTRSPE,NTRSPV
       INTEGER  NTCYS_TVW,NTCYF_TVW
       INTEGER  NWS
@@ -530,6 +547,7 @@ Corbitt 120322: Create Elemental Versions of IFNLCAT and IFNLCT
       integer, target :: iwstp ! file position in wind velocity station file
       integer, target :: ipstp ! position in barometric pressure station file
       integer, target :: iestp ! file position in station elevation file 
+      integer, target :: iflstp ! file position in station flux file 
       integer, target :: ig_tvw ! file position in weir elevation file
       integer, target :: nodeCodeOutFilePos
       integer, target :: noffOutFilePos
@@ -561,6 +579,7 @@ Casey 090302: Added a variable for output of radiation stress gradients.
 !#endif
       INTEGER  NOUTGC, NOUTGE, NOUTGV, NOUTGW, NOUTM, NOUT_TVW
       INTEGER, TARGET :: NSCOUC, NSCOUE, NSCOUGC, NSCOUGE, NSCOUGV ! output spool counters
+      INTEGER, TARGET :: NSCOUFL ! output spool counter
       INTEGER, TARGET :: NSCOUGW, NSCOURS, NSCOUGP, NSCOUM, NSCOUV ! output spool counters
       INTEGER, TARGET :: NSCOUGI, NSCOUGT, NSCOUGS  ! output spool counters
       INTEGER, TARGET :: NSCOU_TVW ! output spool counters
@@ -633,6 +652,7 @@ C     kmd48.33bc - added variables for 3D boundary conditions
       CHARACTER(80) :: references  ! published/web-based references that describe the data
       CHARACTER(7),  ALLOCATABLE :: STATNUMB(:,:)
       CHARACTER(50), ALLOCATABLE, TARGET  :: STATNAME(:)
+      CHARACTER(50), ALLOCATABLE, TARGET  :: STATNAMEFL(:)
       CHARACTER(7),  ALLOCATABLE :: STATNUMBV(:,:)
       CHARACTER(50), ALLOCATABLE, TARGET  :: STATNAMEV(:)
       INTEGER, PARAMETER :: SNUMLEN = 7
@@ -1146,6 +1166,8 @@ C
       ALLOCATE ( UU2(MNP),VV2(MNP))
       uu2(:) = -99999.d0
       vv2(:) = -99999.d0
+      ALLOCATE ( QN2_FLUX(MNP))
+      qn2_flux(:) = -99999.d0
       ALLOCATE ( QX2(MNP),QY2(MNP))
       qx2(:) = -99999.d0
       qy2(:) = -99999.d0
@@ -1330,6 +1352,20 @@ C
       RETURN
       END SUBROUTINE ALLOC_MAIN7
 
+C...
+C...Allocate space for arrays used for station flux output
+C...
+      SUBROUTINE ALLOC_MAIN77()
+      USE SIZES, ONLY : MNSTAFL
+      IMPLICIT NONE
+C
+      ALLOCATE ( NNFL(MNSTAFL),QN2_FLUX_00(MNSTAFL))
+      ALLOCATE ( STAIFL1(MNSTAFL),STAIFL2(MNSTAFL),STAIFL3(MNSTAFL))
+      ALLOCATE ( XFFL(MNSTAFL),YFFL(MNSTAFL) )
+      ALLOCATE ( SLFLL(MNSTAFL),SFFLL(MNSTAFL))
+
+      RETURN
+      END SUBROUTINE ALLOC_MAIN77
 
 C...
 C...Allocate space for arrays used for station velocity output

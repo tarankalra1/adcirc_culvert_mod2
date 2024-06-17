@@ -39,6 +39,9 @@ C-----------------------------------------------------------------------
      &   elevalpha, emo, efa, qnam, qnph, nffr, fff, famig, fface, fper,
      &   alpha, enam, enph, usenetcdfoutput, inundationoutput, ntcyfe,
      &   warnelevdumpcounter, smag_upper_lim, outputwinddrag, ntrspe,
+     &   nscoufl, iflstp, nnfl, noutfl, nstafl, nstafl_g, staifl1,
+     &   staifl2, staifl3, ntcysfl, ntcyffl, nspoolfl, xffl, yffl,
+     &   ntrspfl, noutfl, slfll, sffll, toutsfl, toutffl, statnamefl,
      &   inunthresh, ntcyse, noute, statname, nne, xel, yel, slel, sfel,
      &   noutv, toutsv, toutfv, nnv, statnamev, nstav, ntcysv, ntcyfv,
      &   nspoolv, staie1, staie2, staie3, xev, yev, ntrspv, slev, sfev,
@@ -59,7 +62,7 @@ C-----------------------------------------------------------------------
      &   bchgtiminc, base_date, contact, convention, host, comments,
      &   nhstar, nhsinc, ndsetsw, ntcysgw, ntcyfgw, cpl2stwave, c3d,
      &   alloc_main1a, alloc_main2, alloc_main3, alloc_main4a, 
-     &   alloc_main4b, alloc_main5, alloc_main7, alloc_main8, 
+     &   alloc_main4b, alloc_main5, alloc_main7, alloc_main77, alloc_main8, 
      &   alloc_main10, alloc_main12, alloc_main13, alloc_main9,
      &   alloc_main6, openfileforread, nhoutonce, omega, IFSPROTS,
      &   StatPartWetFix, How2FixStatPartWet, cgwce_hdp, ifnl_hdp,
@@ -191,7 +194,9 @@ C
       INTEGER :: IOS_STATIONS = 0
       INTEGER :: STAT_LUN = 15  !station unit number fort.15 file be default
       INTEGER :: NSTAE2,NSTAV2,NSTAC2,NSTAM2
+      INTEGER :: NSTAFL2
       LOGICAL :: USE_ELEV_STAT_FILE = .false.    !.true. only if an elevation station file exists
+      LOGICAL :: USE_FLUX_STAT_FILE = .false.    !.true. only if an flux station file exists
       LOGICAL :: USE_VEL_STAT_FILE = .false.     !.true. only if a velocity station file exists
       LOGICAL :: USE_CONC_STAT_FILE = .false.    !.true. only if a concentration station file exists
       LOGICAL :: USE_MET_STAT_FILE = .false.     !.true. only  if a met station file exists
@@ -3628,15 +3633,159 @@ C  Allocate arrays dimensioned by MNSTAE
       call alloc_main7()
 C
 C....INPUT COORDINATES OF ELEVATION RECORDING STATIONS THEN COMPUTE
-C....THE ELEMENT NO. THE STATION LIES IN
+C.... THE ELEMENT NO. THE STATION LIES IN
       ALLOCATE(STATNAME(MNSTAE))
       CALL readStations(STATNAME, NSTAE, NNE, XEL, YEL, SLEL, SFEL,
      &                  STAIE1, STAIE2, STAIE3,STAT_LUN,
      &                  'ELEVATION RECORDING STATION   ')
       !tcm v51.20.04 addition for external station file
       IF ((USE_ELEV_STAT_FILE).AND.(STAT_LUN ==151)) CLOSE(STAT_LUN)
- 9911 FORMAT(F12.3,2X,F12.3, 6X, A50)
- 9111 FORMAT(F8.3,2X,F8.3, 6X, A50)
+9911  FORMAT(F12.3,2X,F12.3, 6X, A50)
+9111  FORMAT(F8.3,2X,F8.3, 6X, A50)
+
+C...
+C...INPUT INFORMATION FOR FLUX RECORDING STATIONS
+C...
+
+C....READ IN NOUTFL,TOUTSFL,TOUTFFL,NSPOOLFL : IF ABS(NOUTFL)>0, INTERPOLATED
+C....FLUX AT FLUX STATIONS ARE SPOOLED TO UNIT 611 EVERY NSPOOLFL
+C....TIME STEPS BETWEEN TIMES TOUTSE AND TOUTFE
+
+      READ(15,*) NOUTFL,TOUTSFL,TOUTFFL,NSPOOLFL
+      WRITE(16,30010) NOUTFL
+30010 FORMAT(///,1X,'FLUX RECORDING STATION OUTPUT : ',
+     &        //,5X,'NOUTFL = ',I2)
+
+C....CHECK INPUT PARAMETER NOUTE
+      SELECT CASE(ABS(NOUTFL))
+         CASE(0)
+            ! IF STATION FLUX OUTPUT WILL NOT BE GENERATED
+            CALL logMessage(INFO,
+     &     'NO OUTPUT WILL BE SPOOLED AT FLUX RECORDING STATIONS.')
+         CASE(1)
+            CALL logMessage(INFO,'UNIT 611 FORMAT WILL BE ASCII.')
+         CASE(2)
+            CALL logMessage(INFO,'UNIT 611 FORMAT WILL BE BINARY.')
+         CASE(3)
+            useNetCDF = .true.
+            useNetCDFOutput = .true.
+            CALL logMessage(INFO,
+     &       'UNIT 611 WILL BE NETCDF CLASSIC MODEL / NETCDF3 FORMAT.')
+         CASE(5)
+            useNetCDF = .true.
+            useNetCDFOutput = .true.
+            CALL logMessage(INFO,
+     &  'UNIT 611 WILL BE NETCDF CLASSIC MODEL / NETCDF4 (HDF5) FORMAT.')
+         CASE(4,6:)
+            call allMessage(ERROR,"This NOUTE value is invalid.")
+            call ADCIRC_Terminate()
+         CASE DEFAULT
+            ! do nothing, the other cases handled below
+      END SELECT
+
+C....IF STATION FLUX OUTPUT WILL BE GENERATED
+
+      IF(NOUTFL.NE.0) THEN
+
+C......COMPUTE NTCYSFL,  NTCYFFL, WHICH = TOUTSFL AND TOUTFFL IN TIMESTEPS
+
+#ifdef IBM
+         NTCYSFL=INT((TOUTSFL-STATIM)*(86400.D0/DTDP)+0.5d0,KIND(0.0d0))
+         NTCYFFL=INT((TOUTFFL-STATIM)*(86400.D0/DTDP)+0.5d0,KIND(0.0d0))
+#else
+         NTCYSFL=INT((TOUTSFL-STATIM)*(86400.D0/DTDP)+0.5d0)
+         NTCYFFL=INT((TOUTFFL-STATIM)*(86400.D0/DTDP)+0.5d0)
+#endif
+         IF(NTCYFFL.GT.NT) NTCYFFL=NT
+
+C......COMPUTE NTRSPFL = THE NO. OF DATA SETS TO BE SPOOLED TO UNIT 61
+
+         IF(NSPOOLFL.EQ.0) NTRSPFL=0
+#ifdef IBM
+         IF(NSPOOLFL.NE.0) NTRSPFL=INT((NTCYFFL-NTCYSFL)/NSPOOLFL,KIND(0.0d0))
+#else
+         IF(NSPOOLFL.NE.0) NTRSPFL=INT((NTCYFFL-NTCYSFL)/NSPOOLFL)
+#endif
+C......WRITE TOUTSE,TOUTFE,NTCYSE,NTCYFE,NSPOOLE TO UNIT 16
+
+         WRITE(16,30040) TOUTSFL,NTCYSFL,TOUTFFL,NTCYFFL,NSPOOLFL
+30040    FORMAT(/,5X,'DATA RECORDS WILL START AFTER TOUTSFL =',F8.3,
+     &              ' DAY(S) RELATIVE',
+     &         /,9X,'TO THE STARTING TIME OR',I9,
+     &              ' TIME STEPS INTO THE SIMULATION',
+     &        //,5X,'DATA RECORDS WILL STOP AFTER TOUTFFL =',F8.3,
+     &              ' DAY(S) RELATIVE',/,9X,'TO THE STARTING TIME OR',
+     &           I9,' TIME STEPS INTO THE SIMULATION',
+     &        //,5X,'INFORMATION WILL BE SPOOLED TO UNIT 611 EVERY',
+     &              ' NSPOOLFL =',I8,' TIME STEPS')
+
+      ENDIF
+C....REGARDLESS OF WHETHER NOUTFL=0, READ IN THE NUMBER OF FLUX 
+C....RECORDING STATIONS
+
+C.... tcm v51.20.04 - additions for external specification of
+C       flux station locations
+      READ(15,*) NSTAFL
+      STAT_LUN = 15
+      IF (NSTAFL < 0) THEN
+         USE_FLUX_STAT_FILE = .TRUE.
+         IOS_STATIONS = 0
+         STAT_LUN = 151
+         NSTAFL = ABS(NSTAFL) !SET TO POSITIVE
+         WRITE(16,*) ' FLUX RECORDING STATIONS WILL BE READ FROM',
+     &               ' AN EXTERNAL FILE.'
+         NSTAFL2 = 0
+         OPEN(unit=stat_lun,file=TRIM(INPUTDIR)//'/'//'flux_stat.151',
+     &        status='old',err=76900,iostat=ios_stations)
+         READ(151,*) NSTAFL2
+         IF (ABS(NSTAFL2).NE. ABS(NSTAFL)) THEN
+            NSTAFL = ABS(NSTAFL2)  !RESET THE VALUE TO WHAT'S IN THE FILE
+         ENDIF
+         WRITE(16,30070) NSTAFL
+76900     IF (IOS_STATIONS .NE. 0) THEN
+            WRITE(16,*) "ERROR READING FLUX STATION FILE: flux_stat.151"
+            WRITE(16,*) " Stopping Execution"
+            call allMessage(ERROR,"Problem Reading Flux Station File.")
+            call ADCIRC_Terminate()
+#ifdef CMPI
+            call msg_fini()
+#endif
+            CALL EXIT(1)  ! there is a stop here
+         ENDIF                  
+      ELSE         
+         WRITE(16,30070) NSTAFL
+         IF (NSTAFL.NE.0) THEN
+            WRITE(16,*) "FLUX STATION LOCATIONS READ FROM FORT.15"
+         ENDIF
+      ENDIF
+30070 FORMAT(///,5X,'NUMBER OF INPUT FLUX RECORDING STATIONS = ',
+     &              I5)
+C
+C
+      IF(NSTAFL.GT.0) THEN
+         IF(ICS.EQ.1) WRITE(16,30080)
+30080     FORMAT(/,7X,'STATION #   ELEMENT',9X,'X',13X,'Y',/)
+         IF(ICS.NE.1) WRITE(16,30090)
+30090      FORMAT(/,5X,'STATION   ELEMENT',3X,'LAMBDA(DEG)',
+     &           4X,'FEA(DEG)',10X,'XCP',12X,'YCP',/)
+         MNSTAFL = NSTAFL
+      ENDIF
+      IF (NSTAFL.EQ.0) MNSTAFL = 1
+
+C  Allocate arrays dimensioned by MNSTAFL
+      call alloc_main77()
+C
+C....INPUT COORDINATES OF FLUX RECORDING STATIONS THEN COMPUTE
+C....THE ELEMENT NO. THE STATION LIES IN
+      ALLOCATE(STATNAMEFL(MNSTAFL))
+      CALL readStations(STATNAMEFL, NSTAFL, NNFL, XFFL, YFFL, SLFLL, SFFLL,
+     &                  STAIFL1, STAIFL2, STAIFL3,STAT_LUN,
+     &                  'FLUX RECORDING STATION        ')
+      !tcm v51.20.04 addition for external station file
+      IF ((USE_FLUX_STAT_FILE).AND.(STAT_LUN ==151)) CLOSE(STAT_LUN)
+99110 FORMAT(F12.3,2X,F12.3, 6X, A50)
+91110 FORMAT(F8.3,2X,F8.3, 6X, A50)
+
 C...
 C...INPUT INFORMATION FOR VELOCITY RECORDING STATIONS
 C...
@@ -4676,6 +4825,7 @@ C - allocate arrays dealing with wind forcing
          NP_G    = NP               !
          NE_G    = NE               !
          NSTAE_G = NSTAE
+         NSTAFL_G = NSTAFL
          NSTAV_G = NSTAV
          NSTAM_G = NSTAM
          NSTAC_G = NSTAC
@@ -4689,7 +4839,7 @@ C - allocate arrays dealing with wind forcing
 C     write table of ADCIRC parameter sizes
 C tcm v51.09 added output for MNWPROH -- Number of Hot Start Writer Procs
       WRITE(16,4010)MNPROC,MNWPROC,MNWPROH,MNE,MNP,MNei,MNOPE,MNETA,
-     & MNBOU,MNVEL,MNTIF,MNBFR,MNSTAE,MNSTAV,MNSTAC,MNSTAM,NWLAT,NWLON,
+     & MNBOU,MNVEL,MNTIF,MNBFR,MNSTAE,MNSTAFL,MNSTAV,MNSTAC,MNSTAM,NWLAT,NWLON,
      & MNHARF,MNFFR
       IF(NWS.EQ.0) WRITE(16,4011)
       IF(NWS.EQ.1) WRITE(16,4012)
@@ -4738,6 +4888,7 @@ C tcm v51.09 added output for MNWPROH -- Number of Hot Start Writer Procs
      &       ' *       MNBOU = ',I6,3X,'   MNVEL = ',I6,3X,'       *',/,
      &       ' *       MNTIF = ',I6,3X,'   MNBFR = ',I6,3X,'       *',/,
      &       ' *       MNSTAE = ',I5,4X,'  MNSTAV = ',I5,4X,'      *',/,
+     &       ' *       MNSTAFL = ',I5,4X,'                         *',/,
      &       ' *       MNSTAC = ',I5,4X,'  MNSTAM = ',I5,4X,'      *',/,
      &       ' *       MNWLAT = ',I5,4X,'  MNWLON = ',I5,4X,'      *',/,
      &       ' *       MNHARF = ',I5,4X,'  MNFFR = ',I6,3X,'       *',/,

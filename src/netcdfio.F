@@ -170,6 +170,7 @@ C
          REAL(SZ), ALLOCATABLE :: y(:) ! y coordinate or latitude
          INTEGER :: station_data_id
          INTEGER :: u_station_data_id
+         INTEGER :: flux_station_data_id
          INTEGER :: v_station_data_id
          INTEGER :: w_station_data_id
          INTEGER :: station_data_dims(2)
@@ -188,6 +189,7 @@ C
       END TYPE stationData
 C
       type(stationData), private, save :: elevSta ! elev stations (fort.61)
+      type(stationData), private, save :: fluxSta ! flux stationsa(fort.611)
       type(stationData), private, save :: prSta   ! pressure stations (fort.71)
       type(stationData), private, save :: velSta  ! velocity stations (fort.62)
       type(stationData), private, save :: wVelSta ! wind vel stations (fort.72)
@@ -444,6 +446,9 @@ C
             CALL initNodalDataFile(HAvel, descript1, reterr)
          CASE(61)
             CALL initStationFile(elevSta, descript1, reterr)
+         CASE(611)
+            write(6,*) "I am here 611"
+            CALL initStationFile(fluxSta, descript1, reterr)
          CASE(62)
             CALL initStationFile(velSta, descript1, reterr)
          CASE(63)
@@ -548,7 +553,7 @@ C-----------------------------------------------------------------------
       USE SIZES, ONLY : MNPROC
       USE GLOBAL, ONLY : SNAMLEN, OutputDataDescript_t, RAD2DEG,
      &                   IHOT, NWS, STATNAME, STATNAMEV,
-     &                   STATNAMEM, IDEN
+     &                   STATNAMEFL, STATNAMEM, IDEN
       USE GLOBAL_3DVS, ONLY : STATNAMED, STATNAMEV3D, STATNAMET
       USE MESH, ONLY : ICS
 #ifdef CMPI
@@ -675,6 +680,7 @@ C     different types of data in the station files. The labels and
 C     units will also vary according to the coordinate system ADCIRC
 C     is using (spherical or cartesian, according to the value of ICS)
 C     as well as the units system (english or si according to the value of g).
+     
       SELECT CASE(descript1 % lun)
          CASE(41) !       F O R T . 4 1
             iret = nf90_def_var(sta%ncid, 'sigmat', NF90_DOUBLE,
@@ -1035,7 +1041,7 @@ C     &      'm s-1', 'ft s-1') !TODO: jgf49.48.01: units for q20??
             sta%statnames => STATNAMEV
 
          CASE(61) !       F O R T . 6 1
-
+            
             sta%station_data_dims(1) = sta%num_sta_dim_id
             sta%station_data_dims(2) = sta%myTime%timenc_dim_id
             iret = nf90_def_var(sta%ncid, 'zeta', NF90_DOUBLE,
@@ -1057,6 +1063,28 @@ C     &      'm s-1', 'ft s-1') !TODO: jgf49.48.01: units for q20??
 !     &             'positive', 'up')
 !            CALL check_err(iret)
             sta%statnames => STATNAME
+
+         CASE(611) !       F O R T . 6 11
+            write(6,*) "I am here 1067"
+            sta%station_data_dims(1) = sta%num_sta_dim_id
+            sta%station_data_dims(2) = sta%myTime%timenc_dim_id
+
+            iret = nf90_def_var(sta%ncid, 'flux', NF90_DOUBLE,
+     &         sta%station_data_dims, sta%station_data_id)
+            CALL check_err(iret)
+            iret = nf90_put_att(sta%ncid, sta%station_data_id,
+     &         'long_name', 'flux from culvert')
+            CALL check_err(iret)
+            iret = nf90_put_att(sta%ncid, sta%station_data_id,
+     &         'standard_name', 'flux')
+            CALL check_err(iret)
+            iret = nf90_put_att(sta%ncid, sta%station_data_id,
+     &         'units', 'meters3/s')
+            CALL check_err(iret)
+            iret = nf90_put_att(sta%ncid, sta%station_data_id,
+     &         '_FillValue', doubleval)
+            CALL check_err(iret)
+            sta%statnames => STATNAMEFL 
 
          CASE(62) !       F O R T . 6 2
 
@@ -1383,6 +1411,10 @@ C     netcdf4 file format.
             CALL check_err(nf90_def_var_deflate(sta%ncid, sta%hg_v_station_data_id,
      &             1, 1, 2))
          CASE(61,71,109)
+            iret = nf90_def_var_deflate(sta%ncid, sta%station_data_id,
+     &             1, 1, 2)
+            CALL check_err(iret)
+         CASE(611)
             iret = nf90_def_var_deflate(sta%ncid, sta%station_data_id,
      &             1, 1, 2)
             CALL check_err(iret)
@@ -4150,6 +4182,9 @@ C
      &           descript2,descript3,descript4)
          CASE(61)
             CALL writeStationData(elevSta, lun, descript1, timesec)
+         CASE(611)
+            CALL writeStationData(fluxSta, lun, descript1, timesec)
+            !CALL writeStationData(prSta, lun, descript1, timesec)
          CASE(62)
             CALL writeStationData(velSta, lun, descript1, timesec)
          CASE(63)
@@ -4490,6 +4525,19 @@ C
      &          descript1%array_g, start, kount)
          ENDIF
          CALL check_err(iret)
+
+       CASE(611)
+         iret=nf90_inq_varid(sta%ncid, "flux", sta%station_data_id)
+         CALL check_err(iret)
+         IF (MNPROC.eq.1) THEN
+            iret = nf90_put_var(sta%ncid, sta%station_data_id,
+     &          descript1%array, start, kount)
+         ELSE
+            iret = nf90_put_var(sta%ncid, sta%station_data_id,
+     &          descript1%array_g, start, kount)
+         ENDIF
+         CALL check_err(iret)
+
       CASE(62)
          iret=nf90_inq_varid(sta%ncid, "u-vel", sta%u_station_data_id)
          CALL check_err(iret)

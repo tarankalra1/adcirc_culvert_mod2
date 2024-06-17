@@ -299,12 +299,12 @@ C-----------------------------------------------------------------------
                 BAR_ETA_MAX(1:NVEL) = 0D0
                 BAR_FAILURE_START(1:NVEL) = -1D0
                 BAR_FAILURE_DURATION(1:NVEL) = -1D0
-
+C               TSK : 6,26 is not needed because this is time varying bc
 C...............COUNT THE NUMBER OF WEIR STYLE BOUNDARIES
                 NWEIR = 0
                 DO I = 1,NVEL
                     SELECT CASE(LBCODEI(I))
-                        CASE(3,13,23,4,24,5,25)
+                        CASE(3,13,23,4,24,5,25,6,26)
                             NWEIR = NWEIR + 1
                     END SELECT
                 ENDDO
@@ -314,7 +314,7 @@ C...............CONSTRUCT ARRAYS OF X,Y FOR BOUNDARY NODE LOCATIONS
                 IDX = 0
                 DO I = 1,NVEL
                     SELECT CASE(LBCODEI(I))
-                        CASE(3,13,23,4,24,5,25)
+                        CASE(3,13,23,4,24,5,25,6,26)
                             IDX = IDX + 1
                             BAR_LOCATIONS(1,IDX) = X(NBV(I))
                             BAR_LOCATIONS(2,IDX) = Y(NBV(I))
@@ -1300,7 +1300,7 @@ C...........................A ONE SIDED STYLE WEIR, WE DONT NEED X2 AND Y2
                                 BAR_SCHEDULE(IDX)%OFFSET = OFFSET   
                             ENDIF
 
-                        CASE(4,24,5,25)
+                        CASE(4,24,5,25,6,26)
 C...........................A TWO SIDED STYLE WEIR, WE NEED X2 AND Y2
                             CALL FIND_BOUNDARY_NODES(X2,Y2,IDX2)
                             IF(IDX2.EQ.-1)THEN
@@ -2029,14 +2029,13 @@ C..............ZC - STREAMLINE THE PROCESS SINCE BARAVGWT IS ZERO BY DEFAULT
                RBARWL1F=2.D0*RBARWL1/3.D0
                RBARWL2F=2.D0*RBARWL2/3.D0
                FLUX=0.D0
-   
                IF((RBARWL1.LT.0.D0).AND.(RBARWL2.LT.0.D0)) THEN
 C...............WATER LEVEL ON BOTH SIDES OF BARRIER BELOW BARRIER -> CASE 1
-                  FLUX=0.D0
+                  FLUX=0.0D0
                ELSEIF(ABS(RBARWL1-RBARWL2).LT.0.01D0) THEN
 C...............WATER LEVEL EQUAL ON BOTH SIDES OF BARRIER
 C................TO WITHIN TOLERANCE BARMIN -> CASE 2
-                  FLUX=0.D0
+                  FLUX=0.0D0
                ELSEIF((RBARWL1.GT.RBARWL2).AND.(RBARWL1.GT.BARMIN)) THEN
 C...............WATER LEVEL GREATER ON THIS SIDE OF THE BARRIER AND IS SUCH
 C................THAT OVERTOPPING IS OCCURING
@@ -2097,7 +2096,7 @@ C..................INWARD SUPERCRITICAL FLOW -> CASE 6
                      ENDIF
                   ENDIF
                ELSE
-                  FLUX=0
+                  FLUX=0.0
                ENDIF
                
 #if defined(WEIR_TRACE) || defined(ALL_TRACE) 
@@ -2131,7 +2130,24 @@ C-----------------------------------------------------------------------
 
                 REAL(SZ)               :: RBARWL1
                 REAL(SZ)               :: RBARWL2
-                
+                REAL(SZ)               :: RBARWL1F
+                REAL(SZ)               :: RBARWL2F 
+                REAL(SZ), PARAMETER    :: c_b = 1.0, c_h = 0.8, r = 1.20
+                REAL(SZ)               :: z_invert
+                REAL(SZ)               :: h_1, h_4, z_a, z_b
+                REAL(SZ)               :: abs_Q_outlet_ctl
+                REAL(SZ)               :: h_3_outlet_ctl
+                REAL(SZ)               :: abs_u_3_outlet_ctl
+                REAL(SZ)               :: abs_Q_inlet_ctl, h_3_inlet_ctl
+                REAL(SZ)               :: abs_u_3_inlet_ctl
+                REAL(SZ)               :: u_3, Q, fric_fact
+                REAL(SZ)               :: k_e, denom, denom1, denom2
+                REAL(SZ)               :: h_3, abs_Q, calc_sign, abs_u_3
+                REAL(SZ)               :: h_11, h_12
+                REAL(SZ)               :: B, D, L, f
+                REAL(SZ), PARAMETER    :: two_by_three = 2.0D0/3.0D0
+                REAL(SZ), PARAMETER    :: L_grid = 25.0D0
+
                 CALL setMessageSource("COMPUTE_CROSS_BARRIER_PIPE_FLUX")
 #if defined(WEIR_TRACE) || defined(ALL_TRACE) 
                 CALL allMessage(DEBUG,"Enter")
@@ -2188,19 +2204,22 @@ C..................OUTWARD FREE DISCHARGE -> CASE 3
                      IF(NODECODE(NNBB1).EQ.0) THEN
                         FLUX=0.0D0
                      ELSE
-                        FLUX=-RampIntFlux
+                       FLUX=-RampIntFlux
      &                       *0.25D0*PI*(PIPEDIAM(IDX))**2
      &                       *(2.D0*G*RBARWL1/(1.D0+PIPECOEF(IDX)))**0.5D0
+                       FLUX = FLUX/L_grid 
                      ENDIF
                   ELSE
 C..................OUTWARD SUBMERGED DISCHARGE -> CASE 4
                      IF(NODECODE(NNBB1).EQ.0) THEN
                         FLUX=0.0D0
                      ELSE
+                     ! outlet is submerged case 4
                         FLUX=-RampIntFlux
      &                       *0.25D0*PI*(PIPEDIAM(IDX))**2
      &                    *(2.D0*G*(RBARWL1-RBARWL2)/PIPECOEF(IDX))**0.5D0
-                     ENDIF
+                       FLUX = FLUX/L_grid
+                     ENDIF   
 #if defined(WEIR_TRACE) || defined(ALL_TRACE)
                      CALL allMessage(DEBUG,"Return")
 #endif                
@@ -2222,29 +2241,33 @@ C..................INWARD FREE DISCHARGE -> CASE 5
                      IF(NODECODE(NNBB2).EQ.0) THEN
                         FLUX=0.0D0
                      ELSE
-                        FLUX=RampIntFlux
+                 ! Case 5 starts
+                       FLUX=RampIntFlux
      &                       *0.25D0*PI*(PIPEDIAM(IDX))**2
-     &                       *(2.D0*G*RBARWL2/(1.D0+PIPECOEF(IDX)))**0.5D0
-                        NIBNODECODE(NNBB1)=1
+     &                      *(2.D0*G*RBARWL2/(1.D0+PIPECOEF(IDX)))**0.5D0
+                       FLUX = FLUX/L_grid
+                       NIBNODECODE(NNBB1)=1
                      ENDIF
                   ELSE
 C..................INWARD SUBMERGED DISCHARGE -> CASE 6
                      IF(NODECODE(NNBB2).EQ.0) THEN
                         FLUX=0.0D0
                      ELSE
-                        FLUX=RampIntFlux
+                   ! outlet is submerged case
+                       FLUX=RampIntFlux
      &                       *0.25D0*PI*(PIPEDIAM(IDX))**2
      &                   *(2.D0*G*(RBARWL2-RBARWL1)/PIPECOEF(IDX))**0.5D0
-                        NIBNODECODE(NNBB1)=1
+                       FLUX = FLUX/L_grid
+                       NIBNODECODE(NNBB1)=1
                      ENDIF
                   ENDIF
+
 #if defined(WEIR_TRACE) || defined(ALL_TRACE)
                   CALL allMessage(DEBUG,"Return")
 #endif                
                   CALL unsetMessageSource()
                   RETURN
                ENDIF
-
 #if defined(WEIR_TRACE) || defined(ALL_TRACE) 
                CALL allMessage(DEBUG,"Return")
 #endif
@@ -2252,6 +2275,268 @@ C..................INWARD SUBMERGED DISCHARGE -> CASE 6
 
             END SUBROUTINE
 
+C-----------------------------------------------------------------------
+C     S U B R O U T I N E
+C       C O M P U T E _ C R O S S _ CULVERT _ F L U X
+C-----------------------------------------------------------------------
+C  THIS ROUTINE COMPUTE THE DISCHARGE ACROSS TYPE 6,26 BOUNDARY
+C  CONDITIONS (CROSS BARRIER PIPES)
+C-----------------------------------------------------------------------
+            SUBROUTINE COMPUTE_CROSS_CULVERT_FLUX(IT,IDX,JDX,KDX,FLUX)
+
+                USE BOUNDARIES, ONLY:NBV,IBCONN,CULVERT_BREADTH,  
+     &          CULVERT_DEPTH, NVELL, CULVERT_LENGTH, 
+     &          CULVERT_GRID_LENGTH, Z_INVERT_A, Z_INVERT_B, 
+     &          KE_ENTRANCE_LOSS, FRIC_CULVERT_FACTOR 
+                USE GLOBAL,ONLY: G,PI,NODECODE,NIBNODECODE,ETA2,
+     &                           RampIntFlux           
+
+                IMPLICIT NONE
+                INTEGER,INTENT(IN)     :: IT
+                INTEGER,INTENT(IN)     :: IDX
+                INTEGER,INTENT(IN)     :: JDX
+                INTEGER,INTENT(IN)     :: KDX
+                REAL(SZ),INTENT(INOUT)   :: FLUX
+
+                REAL(SZ), PARAMETER    :: c_b = 1.0, c_h = 0.8, r = 1.20
+                REAL(SZ)               :: z_invert
+                REAL(SZ)               :: h_1, h_4, z_a, z_b
+                REAL(SZ)               :: abs_Q_outlet_ctl
+                REAL(SZ)               :: h_3_outlet_ctl
+                REAL(SZ)               :: abs_u_3_outlet_ctl
+                REAL(SZ)               :: abs_Q_inlet_ctl, h_3_inlet_ctl
+                REAL(SZ)               :: abs_u_3_inlet_ctl
+                REAL(SZ)               :: u_3, Q, fric_fact
+                REAL(SZ)               :: k_e, denom, denom1, denom2
+                REAL(SZ)               :: h_3, abs_Q, calc_sign, abs_u_3
+                REAL(SZ)               :: h_11, h_12
+                REAL(SZ)               :: B, D, L, L_grid, f
+                REAL(SZ), PARAMETER    :: two_by_three = 2.0D0/3.0D0
+                !REAL(SZ), PARAMETER    :: eps_1 = 0.0001D0
+                REAL(SZ), PARAMETER    :: eps_1 = 0.1D0, BARMIN = 0.05D0
+
+                INTEGER                :: NNBB1
+                INTEGER                :: NNBB2 
+
+                CALL setMessageSource("COMPUTE_CROSS_CULVERT_FLUX")
+#if defined(WEIR_TRACE) || defined(ALL_TRACE) 
+                CALL allMessage(DEBUG,"Enter")
+#endif                
+                NNBB1=NBV(IDX)     ! GLOBAL NODE NUMBER ON THIS SIDE OF BARRIER
+                NNBB2=IBCONN(IDX)  ! GLOBAL NODE NUMBER ON OPPOSITE SIDE OF BARRIER
+
+                h_11 = ETA2(NNBB1)-Z_INVERT_A(IDX)
+                h_12 = ETA2(NNBB2)-Z_INVERT_B(IDX)
+
+                B = CULVERT_BREADTH(IDX)
+                D = CULVERT_DEPTH(IDX)
+                L = CULVERT_LENGTH(IDX)
+                L_grid = CULVERT_GRID_LENGTH(IDX)
+                f = FRIC_CULVERT_FACTOR(IDX)
+                k_e = KE_ENTRANCE_LOSS(IDX)
+                fric_fact = (f*L/D)
+
+                FLUX = 0.0D0
+                denom = 1.5D0 + 0.5D0*k_e + 0.5D0*fric_fact
+                denom1= 1.0D0 + k_e + fric_fact
+                !RampIntFlux = 1.00
+
+                !write(602,*) "B",B,"D", D, "L",L
+                !write(603,*) "ke", k_e,"fric", fric_fact,"denom",denom
+                !write(604,*)"denom1",denom1,"Zia",Z_INVERT_A(IDX),"Zba",Z_INVERT_B(IDX)
+                !write(605,*) "h11",h_11, "h12",h_12,"Lgrd",L_grid
+                  IF (h_11 < 0.0D0.and.h_12 < 0.0D0) THEN
+                   ! Case 1
+                   abs_Q = 0.0D0;
+                   u_3 = 0.0D0;
+                   FLUX = RampIntFlux*abs_Q
+                   write(601,*) h_11, h_12, FLUX
+                 ELSE IF (abs(h_11 - h_12).LE.BARMIN) THEN
+!                 ELSE IF ((h_11 == h_12)) THEN
+                   ! Case 2
+                   Q = 0.0D0
+                   u_3 = 0.0D0
+                   FLUX = RampIntFlux*Q
+
+                   write(601,*) h_11, h_12, FLUX
+                 ELSE IF(h_11>h_12.and.h_12<D) THEN
+                   ! Case 3 starts
+                   IF(NODECODE(NNBB1).EQ.0) THEN
+                        FLUX=0.0D0
+                   ELSE
+                     h_1 = h_11 ! This is the maximum of the two
+                     h_4 = h_12 ! This is the minimum of the two
+
+                     ! %inlet control
+                     IF ((h_1/D) <= r) THEN
+                        abs_Q_inlet_ctl = two_by_three*c_b*
+     &                                  B*h_1*SQRT(two_by_three*g*h_1)
+                        h_3_inlet_ctl = MAX(two_by_three * h_1, h_4)
+                        denom2 = 1.0D0/(B*h_3_inlet_ctl)
+                        abs_u_3_inlet_ctl = abs_Q_inlet_ctl*denom2
+                     ELSE
+                        abs_Q_inlet_ctl = c_h*B*
+     &                                  D*SQRT(2.0D0*g*(h_1 - c_h*D))
+                        h_3_inlet_ctl = MAX(c_h*D, h_4)
+                        denom2 = 1.0D0/(B*h_3_inlet_ctl)
+                        abs_u_3_inlet_ctl = abs_Q_inlet_ctl*denom2
+                     END IF
+
+                     !%outlet control
+                     IF ( h_4 <= (h_1/denom) ) THEN
+                       h_3_outlet_ctl = h_1/denom
+                       abs_u_3_outlet_ctl = SQRT(g*h_3_outlet_ctl)
+                       abs_Q_outlet_ctl = B*
+     &                                 h_3_outlet_ctl*abs_u_3_outlet_ctl
+                     ELSE
+                       abs_u_3_outlet_ctl = SQRT(2*g*(h_1-h_4)/denom1)
+                       h_3_outlet_ctl = h_4
+                       abs_Q_outlet_ctl = B*
+     &                                h_3_outlet_ctl*abs_u_3_outlet_ctl
+                     END IF
+                     !%select smaller of inlet- vs outlet-controlled flowrates
+                     IF (abs_Q_inlet_ctl < abs_Q_outlet_ctl) THEN
+                       abs_Q = abs_Q_inlet_ctl
+                       abs_u_3 = abs_u_3_inlet_ctl
+                     ELSE
+                       abs_Q = abs_Q_outlet_ctl
+                       abs_u_3 = abs_u_3_outlet_ctl
+                     END IF
+                     Q = abs_Q
+                     u_3 = abs_u_3
+                   END IF
+                   FLUX = RampIntFlux*Q
+                   FLUX = -FLUX 
+                   FLUX = FLUX/L_grid
+                   IF (abs(FLUX)>eps_1)THEN
+                     FLUX = FLUX
+                   ELSE
+                     FLUX = 0.0
+                   END IF
+                   write(601,*) h_11, h_12, FLUX
+                   ! Case 3 ends 
+                ELSE IF(h_11>h_12.and.h_12>D) THEN
+                   ! Case 4 starts
+                   IF(NODECODE(NNBB1).EQ.0) THEN
+                        FLUX=0.0D0
+                   ELSE
+                     ! outlet is submerged case 4
+                     h_1 = h_11 ! This is the maximum of the two
+                     h_4 = h_12 ! This is the minimum of the two
+                     abs_u_3 = sqrt(2.0D0*g*(h_1 - h_4)/(denom1))
+
+                     h_3 = D
+                     abs_Q = B * h_3 * abs_u_3
+
+                     Q = abs_Q
+                     u_3 = abs_u_3
+                   END IF
+                   FLUX = RampIntFlux*Q
+                   ! If case 4 is source then make flux negative 
+                   ! similar to pump 
+                   FLUX = -FLUX
+                   FLUX = FLUX/L_grid
+                   IF (abs(FLUX)>eps_1)THEN
+                     FLUX = FLUX
+                   ELSE
+                     FLUX = 0.0
+                   END IF
+                  ! Case 4 ends 
+                   write(601,*) h_11, h_12, FLUX
+
+              ELSE IF(h_12>h_11.and.h_11<D) THEN
+                   ! Case 5 starts
+                   ! Check the minimum of the two and work with minimum (h4)
+                   IF(NODECODE(NNBB2).EQ.0) THEN
+                     FLUX=0.0D0
+                   ELSE
+                     h_1 = h_12 ! This is the maximum of the two 
+                     h_4 = h_11 ! This is the minimum of the two 
+
+                     ! %inlet control
+                     IF (h_1/D <= r) THEN
+                       abs_Q_inlet_ctl = two_by_three*c_b*
+     &                                  B*h_1*SQRT(two_by_three*g*h_1)
+                       h_3_inlet_ctl = max(two_by_three * h_1, h_4)
+                       denom2 = 1.0D0/(B*h_3_inlet_ctl)
+                       abs_u_3_inlet_ctl = abs_Q_inlet_ctl*denom2
+                     ELSE
+                       abs_Q_inlet_ctl = c_h*B*
+     &                                  D*SQRT(2.0D0*g*(h_1 - c_h*D))
+                       h_3_inlet_ctl = MAX(c_h*D, h_4)
+                       denom2 = 1.0D0/(B*h_3_inlet_ctl)
+                       abs_u_3_inlet_ctl = abs_Q_inlet_ctl*denom2
+                     END IF
+
+                     !%outlet control
+                     IF ( h_4 <= (h_1/denom) ) THEN
+                       h_3_outlet_ctl = h_1/denom
+                       abs_u_3_outlet_ctl = SQRT(g*h_3_outlet_ctl)
+                       abs_Q_outlet_ctl = B*
+     &                           h_3_outlet_ctl*abs_u_3_outlet_ctl
+                     ELSE
+                       abs_u_3_outlet_ctl = SQRT(2*g*(h_1-h_4)/denom1)
+                       h_3_outlet_ctl = h_4
+                       abs_Q_outlet_ctl = B*
+     &                           h_3_outlet_ctl*abs_u_3_outlet_ctl
+                     END IF
+
+                     !%select smaller of inlet- vs outlet-controlled flowrates
+                     IF (abs_Q_inlet_ctl < abs_Q_outlet_ctl) THEN
+                       abs_Q = abs_Q_inlet_ctl
+                       abs_u_3 = abs_u_3_inlet_ctl
+                     ELSE
+                       abs_Q = abs_Q_outlet_ctl
+                       abs_u_3 = abs_u_3_outlet_ctl
+                     END IF 
+                   END IF
+                   Q = (-1.0)*abs_Q
+                   u_3 =(-1.0)*abs_u_3
+                   FLUX = RampIntFlux*Q
+
+                   FLUX = -FLUX ! Flipped the sign of flux from negative
+                   FLUX = FLUX/L_grid
+                   IF (abs(FLUX)>eps_1)THEN
+                     FLUX = FLUX
+                     NIBNODECODE(NNBB1)=1
+                   ELSE
+                     FLUX = 0.0
+                   END IF
+                   !to positive, Flux at the receiver is positive
+                   ! Case 5 ends 
+                   write(601,*) h_11, h_12, FLUX
+               ELSE IF(h_12>h_11.and.h_11>D) THEN  ! Check the minimum of the two and work with minimum (h4)
+                   ! Case 6 starts
+                   IF(NODECODE(NNBB2).EQ.0) THEN
+                     FLUX=0.0D0
+                   ELSE
+                   ! outlet is submerged case 
+                     h_1 = h_12 ! This is the maximum of the two 
+                     h_4 = h_11 ! This is the minimum of the two 
+
+                     abs_u_3 = sqrt(2.0D0*g*(h_1 - h_4)/(denom1))
+                     h_3 = D
+                     abs_Q = B * h_3 * abs_u_3
+
+                     Q = (-1.0)*abs_Q
+                     u_3 =(-1.0)*abs_u_3
+                   ENDIF
+                   FLUX = RampIntFlux*Q
+                  
+                   FLUX = -FLUX ! Flipped the sign of flux from negative
+                   !to positive, Flux at the receiver is positive
+                   FLUX = FLUX/L_grid
+                   IF (abs(FLUX)>eps_1)THEN
+                     FLUX = FLUX
+                     NIBNODECODE(NNBB1)=1
+                   ELSE
+                     FLUX = 0.0
+                   END IF
+                   ! Case 6 ends 
+                   write(601,*) h_11, h_12, FLUX
+                ENDIF
+                CALL unsetMessageSource()
+            END SUBROUTINE COMPUTE_CROSS_CULVERT_FLUX
 
 #ifdef ORIGWEIR
 C-----------------------------------------------------------------------

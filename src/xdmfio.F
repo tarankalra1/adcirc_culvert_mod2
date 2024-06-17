@@ -470,7 +470,8 @@ C-----------------------------------------------------------------------
       sfCount = 1
       efCount = 1
       ifCount = 1
-      ifwpCount = 1 
+      ifwpCount = 1
+      ifculvCount = 1 
       do i=1, nbou 
          write(fluxBoundaryType,'(i0)') ibtype_orig(i) 
          select case(ibtype_orig(i))
@@ -582,6 +583,99 @@ C-----------------------------------------------------------------------
      &          internalFluxBoundariesWithPipes(ifwpCount)%xdmf_nodes, 
      &          nvell(i), XDMF_ARRAY_TYPE_INT32)
             ifwpCount = ifwpCount + 1
+
+         case(6,26)
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(1) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'IBCONN'//CHAR(0),
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_INT32, 
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_ibconn(:)) ! zero offset
+        
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(2) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'BARINHT'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64,
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%barinht)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(3) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'BARINCFSB'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64,
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%barincfsb)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(4) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'BARINCFSP'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, 
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%barincfsp)   
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(5) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'CULVERT_BREADTH'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, 
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%culvert_breadth)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(6) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'CULVERT_DEPTH'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, 
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%culvert_depth) 
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(7) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'CULVERT_LENGTH'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, 
+     &           internalFluxBoundariesWithCulvert(ifculvCount)%culvert_length)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(8) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'CULVERT_GRID_LENGTH'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, 
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%culvert_grid_length)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(9) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'Z_INVERT_A'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64,internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_a)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(10) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'Z_INVERT_B'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &         XDMF_ARRAY_TYPE_FLOAT64,internalFluxBoundariesWithCulvert(ifculvCount)%z_invert_b)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(11) = 
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'KE_ENTRANCE_LOSS'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, internalFluxBoundariesWithCulvert(ifculvCount)%ke_entrance_loss)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(12)
+     &          XdmfAddAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &          'FRIC_CULVERT_FACTOR'//CHAR(0), 
+     &          XDMF_ATTRIBUTE_CENTER_NODE, XDMF_ATTRIBUTE_TYPE_SCALAR, nvell(i), 
+     &          XDMF_ARRAY_TYPE_FLOAT64, internalFluxBoundariesWithCulvert(ifculvCount)%fric_culvert_factor)
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%informationID = 
+     &          XdmfAddInformation(descript % xdmfMD % xdmfFortranObj, 
+     &          'IBTYPE'//CHAR(0), 
+     &          trim(fluxBoundaryType)//CHAR(0))
+
+            internalFluxBoundariesWithCulvert(ifculvCount)%setID = 
+     &          XdmfAddSet(descript % xdmfMD % xdmfFortranObj,
+     &          'flux_specified_boundary'//char(0), XDMF_SET_TYPE_NODE,
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_nodes, 
+     &          nvell(i), XDMF_ARRAY_TYPE_INT32)
+            ifculvCount = ifculvCount + 1
          case default
             write(6,
      &       '("ERROR: File contains IBTYPE=",i0," which is invalid.")'), ibtype_orig(i)
@@ -622,6 +716,7 @@ C-----------------------------------------------------------------------
       efCount = 1
       ifCount = 1
       ifwpCount = 1 
+      ifculvCount = 1
       do i=1, nbou 
          write(fluxBoundaryType,'(i0)') ibtype_orig(i)
          select case(ibtype_orig(i))
@@ -677,6 +772,21 @@ C-----------------------------------------------------------------------
      &          internalFluxBoundariesWithPipes(ifwpCount)%xdmf_nodes, 
      &          nvell(i), XDMF_ARRAY_TYPE_INT32)
             ifwpCount = ifwpCount + 1
+         case(6,26)
+            do j=1, internalFluxBoundariesWithCulvert(ifculvCount)%numAttributes
+               call xdmfAddPreviousAttribute(descript % xdmfMD % xdmfFortranObj, 
+     &                internalFluxBoundariesWithCulvert(ifculvCount)%attributeIDs(j))
+            end do
+            internalFluxBoundariesWithCulvert(ifculvCount)%informationID = 
+     &          XdmfAddInformation(descript % xdmfMD % xdmfFortranObj, 
+     &          'IBTYPE'//CHAR(0), 
+     &          trim(fluxBoundaryType)//CHAR(0))
+            internalFluxBoundariesWithCulvert(ifculvCount)%setID = 
+     &          XdmfAddSet(descript % xdmfMD % xdmfFortranObj,
+     &          'flux_specified_boundary'//char(0), XDMF_SET_TYPE_NODE,
+     &          internalFluxBoundariesWithCulvert(ifculvCount)%xdmf_nodes, 
+     &          nvell(i), XDMF_ARRAY_TYPE_INT32)
+            ifculvCount = ifculvCount + 1
          case default
             write(6,'("ERROR: File contains IBTYPE=",i0," which is not a valid flux boundary type.")'), ibtype_orig(i)
          end select
@@ -1034,6 +1144,17 @@ C-----------------------------------------------------------------------
       stationType = 'sea_surface_height_above_geoid'
       
       call writeStationsXDMF(nstae, xel, yel, stationType, xdmfFortranObj)
+
+      write(info,fmt='(i0,1x,2f6.3,1x,i0)')noutfl,toutsfl,toutffl,nspoolfl
+      informationID = XdmfAddInformation(xdmfFortranObj,
+     &   'noutfl,toutsfl,toutffl,nspoolfl'//char(0), 
+     &    trim(adjustl(info))//char(0))
+      write(info,fmt='(i0)') nstafl
+      informationID = XdmfAddInformation(xdmfFortranObj,'nstafl'//char(0), 
+     &    trim(adjustl(info))//char(0))
+      stationType = 'flux at culvert'
+      
+      call writeStationsXDMF(nstafl,xfll,yfll, stationType,xdmfFortranObj)
       
       write(info,fmt='(i0,1x,2f15.7,1x,i0)') noutv,toutsv,toutfv,nspoolv
       informationID = XdmfAddInformation(xdmfFortranObj,

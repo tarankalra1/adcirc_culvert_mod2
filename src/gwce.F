@@ -1563,12 +1563,16 @@ C...  the formulation these terms must be explicitly multiplied by -1.
 
 C...Note 3, Eta1 is the latest computed elevation (it was updated above).
 
+      
       IF((NFLUXF.EQ.1).OR.(NFLUXB.EQ.1).OR.(NFLUXIB.EQ.1)
      &     .OR.(NFLUXGBC.EQ.1).OR.(NFLUXRBC.EQ.1)) THEN
          NBDJ=NBV(1)
-         IF (LBCODEI(1).LE.29) QFORCEJ=(QN2(1)-QN0(1))/DT2 +
+         IF (LBCODEI(1).LE.29) QFORCEJ=0.5*(QN2(1)-QN0(1))/DT2 +
      &        Tau0VAR(NBDJ)*QN1(1)
-
+           
+         IF (LBCODEI(1).EQ.26) THEN 
+             QFORCEJ=0.5*(QN2(1)-QN0(1))/DT2 + Tau0VAR(NBDJ)*QN1(1)
+         END IF 
          IF (LBCODEI(1).EQ.30) THEN
             H1=DP(NBDJ)+IFNLFA*ETA1(NBDJ)
             CELERITY=SQRT(G*H1)
@@ -1610,6 +1614,11 @@ C
 
             IF(LBCODEI(J).LE.29) QFORCEJ=(QN2(J)-QN0(J))/DT2+
      &           Tau0VAR(NBDJ)*QN1(J)
+               
+            IF (LBCODEI(1).EQ.26) THEN
+              QFORCEJ=0.5*(QN2(J)-QN0(J))/DT2 + Tau0VAR(NBDJ)*QN1(J)
+            END IF 
+     
             IF(LBCODEI(J).EQ.30) THEN
                H1=DP(NBDJ)+IFNLFA*ETA1(NBDJ)
                CELERITY=SQRT(G*H1)
@@ -2706,7 +2715,7 @@ C...Note 3, Eta1 is the latest computed elevation (it was updated above).
          NBDJ=NBV(1)
          IF(LBCODEI(1).LE.29) QFORCEJ=(QN2(1)-QN0(1))/DT2 +
      &        Tau0VAR(NBDJ)*QN1(1)
-
+        
          IF(LBCODEI(1).EQ.30) THEN
             H1=DP(NBDJ)+IFNLFA*ETA1(NBDJ)
             CELERITY=SQRT(G*H1)
@@ -2731,7 +2740,6 @@ C...Note 3, Eta1 is the latest computed elevation (it was updated above).
 
             IF(LBCODEI(J).LE.29) QFORCEJ=(QN2(J)-QN0(J))/DT2+
      &           Tau0VAR(NBDJ)*QN1(J)
-
             IF(LBCODEI(J).EQ.30) THEN
                H1=DP(NBDJ)+IFNLFA*ETA1(NBDJ)
                CELERITY=SQRT(G*H1)

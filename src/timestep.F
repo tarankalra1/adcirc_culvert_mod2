@@ -39,6 +39,7 @@ C
 #endif
       USE SIZES, ONLY : SZ, MNP, MNWPROH
       USE GLOBAL, ONLY : UU1, VV1, QX1, QY1, QX2, QY2, UU2, VV2, MOM_LV_X,
+     &    QN2_FLUX,
      &    MOM_LV_Y, WSX2, WSY2, PR1, PR2, TiP1, TiP2, UU0, VV0, QY0, 
      &    GWCE_LV, TRANS_LV_B, TRANS_LV_A, WSX1, WSY1, dp1, dp2, QN0, 
      &    EN0, EN1, EN2, CICE1, CICE2, CICEOUT, RSNX1, RSNX2, RSNY1, RSNY2,
@@ -145,6 +146,7 @@ c. RJW merged 08/26/2008 from Casey 071219:Added the following variables for 3D 
       REAL(SZ) CCSFEA
       REAL(SZ) ElMax
       REAL(SZ) PIPE_FLUX
+      REAL(SZ) CULVERT_FLUX
       REAL(SZ) H2N1, H2N2, H2N3
       REAL(SZ) EtaN1,EtaN2,EtaN3
       REAL(SZ) QTRatio
@@ -975,19 +977,29 @@ C                     ACROSS A WEIR
          I = 0                         
          DO K = 1, NBOU  
             SELECT CASE(LBCODEI(I+1))
-                CASE(4,24,5,25)
+                !CASE(4,24,5,25,6,26)
+                CASE(4,24,5,25,26)
                     DO J = 1,NVELL(K)*2
                         I = I + 1
                         CALL COMPUTE_INTERNAL_BOUNDARY_FLUX(I,J,K,
      &                      TIMELOC,QN2(I))
-                    ENDDO
+                            ! Actual pumping code EMH 6-25-2018 added
+                        IF ((LBCODEI(I).EQ.6).OR.(LBCODEI(I).EQ.26)) THEN
+                        !IF (LBCODEI(I).EQ.26) THEN
+                            CULVERT_FLUX = 0.0D0
+                            CALL COMPUTE_CROSS_CULVERT_FLUX(IT,I,J,K,CULVERT_FLUX)
+                            QN2(I) = QN2(I) + CULVERT_FLUX
+                            ! Save culvert flux in a global array 
+                            QN2_FLUX(NBV(I)) =QN2(I)! CULVERT_FLUX*0.0
+                        ENDIF
+                        ! END code EMH added
+                    ENDDO                      
                 CASE DEFAULT
                     I = I + NVELL(K)
             END SELECT    
          ENDDO 
       ENDIF
-
-C...
+C... 
 C...  COMPUTE INWARD/OUTWARD NORMAL FLOW FOR INTERNAL BARRIER
 C.... BOUNDARY NODES THROUGH CROSS BARRIER PIPES
 C.... NOTE THAT THIS ADDS AN ADDITIONAL FLOW COMPONENT INTO QN2
@@ -998,9 +1010,17 @@ C...
                 PIPE_FLUX = 0D0
                 CALL COMPUTE_CROSS_BARRIER_PIPE_FLUX(I,TIMELOC,PIPE_FLUX)
                 QN2(I) = QN2(I) + PIPE_FLUX
+                QN2_FLUX(NBV(I)) = PIPE_FLUX 
+                !QN2_FLUX(I) = PIPE_FLUX
+                !write(6112,*)"qn2 flux", I, QN2_FLUX(I) 
             ENDIF
          ENDDO
-      ENDIF 
+      ENDIF
+C...
+C...  COMPUTE INWARD/OUTWARD NORMAL FLOW FOR INTERNAL BARRIER
+C.... BOUNDARY NODES THROUGH CULVERT 
+C.... NOTE THAT THIS ADDS AN ADDITIONAL FLOW COMPONENT INTO QN2
+C...
 
       if(subdomainOn.and.enforceBN.eq.1) call readFort019(it)  ! NCSU Subdomain
       if(subdomainOn.and.enforceBN.eq.2) call readFort020(it)  ! NCSU Subdomain

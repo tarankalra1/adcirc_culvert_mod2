@@ -1614,6 +1614,83 @@ C...
 c       WRITE(61,REC=ITEMPSTP+1) NTRSPE   ! ALLOW ADDITIONAL OUTPUT DATA TO BE WRITTEN
         CLOSE(61)                         ! DO THIS TO FLUSH THE WRITE BUFFER
       ENDIF
+C...
+C....GO TO THE PROPER PLACE IN THE FLUX STATION OUTPUT FILE
+C...
+      WRITE(16,10420) IFLSTP,NSCOUFL
+10420 FORMAT(//,1X,I6,' LINES OR RECORDS WRITTEN IN FLUX ',
+     &                'STATION FILE BY THE TIME OF THE HOT START',
+     &           /,8X,'SPOOL COUNTER =',I6)
+
+      IF(NTCYSFL.LT.ITHS.AND.NOUTFL.GT.0) NTCYSFL = ITHS + NSPOOLFL - 1 
+      IF(NOUTFL.LT.0) THEN
+        IFLSTP=0
+        NSCOUFL=0
+        IF((NTCYSFL.LT.ITHS).AND.(NSPOOLFL.GT.0)) THEN
+          NTCYSFL=NTCYSFL+((REAL(ITHS)-REAL(NTCYSFL))/
+     &           REAL(NSPOOLFL))*REAL(NSPOOLFL)
+          IF(NTCYSFL.LT.ITHS) NTCYSFL=NTCYSFL+NSPOOLFL
+          NTRSPFL=(NTCYFFL-NTCYSFL)/NSPOOLFL
+        ENDIF
+        WRITE(16,10430)
+10430   FORMAT(//,' A NEW FLUX STATION FILE WILL BE STARTED')
+      ENDIF
+
+      IF(NOUTFL.EQ.-2) THEN
+        OPEN(611,FILE=TRIM(LOCALDIR)//'/'//'fort.611',
+     &                      ACCESS='DIRECT',RECL=NBYTE)
+        IF(NBYTE.EQ.4) THEN
+          DO I=1,8
+            WRITE(611,REC=IFLSTP+I) RDES4(I)
+          ENDDO
+          IFLSTP=IFLSTP+8
+          DO I=1,6
+            WRITE(611,REC=IFLSTP+I) RID4(I)
+          ENDDO
+          IFLSTP=IFLSTP+6
+          DO I=1,6
+            WRITE(611,REC=IFLSTP+I) AID4(I)
+          ENDDO
+          IFLSTP=IFLSTP+6
+          ENDIF
+        IF(NBYTE.EQ.8) THEN
+          DO I=1,4
+            WRITE(611,REC=IFLSTP+I) RDES8(I)
+          ENDDO
+          IFLSTP=IFLSTP+4
+          DO I=1,3
+            WRITE(611,REC=IFLSTP+I) RID8(I)
+          ENDDO
+          IFLSTP=IFLSTP+3
+          DO I=1,3
+            WRITE(611,REC=IFLSTP+I) AID8(I)
+          ENDDO
+          IFLSTP=IFLSTP+3
+        ENDIF
+        WRITE(611,REC=IFLSTP+1) NTRSPFL
+        WRITE(611,REC=IFLSTP+2) NSTAFL
+        WRITE(611,REC=IFLSTP+3) DT*NSPOOLFL
+        WRITE(611,REC=IFLSTP+4) NSPOOLFL
+        WRITE(611,REC=IFLSTP+5) 1
+        IFLSTP=IFLSTP+5
+        CLOSE(611)                    ! DO THIS TO FLUSH THE WRITE BUFFER
+      ENDIF
+      IF(NOUTFL.EQ.-1) THEN
+         if (write_local_files.eqv..false.) then
+            CALL OPEN_GBL_FILE(611, TRIM(GLOBALDIR)//'/'//'fort.611',
+     $         NSTAFL_G, NSTAFL, HEADER611)
+         else
+            CALL OPEN_GBL_FILE(611, TRIM(LOCALDIR)//'/'//'fort.611',
+     $         NSTAFL_G, NSTAFL, HEADER611)
+         endif
+         IFLSTP=2
+      ENDIF
+      IF(NOUTFL.EQ.2) THEN
+        OPEN(611,FILE=TRIM(LOCALDIR)//'/'//'fort.611',
+     &                      ACCESS='DIRECT',RECL=NBYTE)
+c       WRITE(611,REC=ITEMPSTP+1) NTRSPFL   ! ALLOW ADDITIONAL OUTPUT DATA TO BE WRITTEN
+        CLOSE(611)                         ! DO THIS TO FLUSH THE WRITE BUFFER
+      ENDIF
 
 C...
 C....GO TO THE PROPER PLACE IN THE VELOCITY STATION OUTPUT FILE
